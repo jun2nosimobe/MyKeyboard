@@ -28,7 +28,10 @@ class MathKeyboardService : InputMethodService() {
         MATHSCRIPT("SCR", "Script"),
         MATHSYMBOL("SYM", "Symbol")
     }
-    private var currentMode = InputMode.NORMAL
+
+    private val modeCycle = listOf(InputMode.NORMAL, InputMode.MATHSYMBOL)
+    private var currentCycleIndex = 0
+    private var currentMode = modeCycle[currentCycleIndex]
 
     enum class ShiftState { NORMAL, SHIFTED, CAPSLOCKED }
     private var shiftState = ShiftState.NORMAL
@@ -39,6 +42,11 @@ class MathKeyboardService : InputMethodService() {
     private lateinit var keyboardView: View
     private lateinit var prefs: SharedPreferences
     private var keyTextColor = Color.BLACK
+
+    // フリック入力のハイライト追跡用変数
+    private var activePopup: PopupWindow? = null
+    private var currentPopupOptions: List<Pair<View, String>> = emptyList()
+    private var hoveredOption: View? = null
 
     private val deleteHandler = Handler(Looper.getMainLooper())
     private var isDeleting = false
@@ -67,25 +75,106 @@ class MathKeyboardService : InputMethodService() {
         return typedValue.resourceId
     }
 
-    private fun setupFastKey(button: TextView, onClick: () -> Unit, onLongPress: () -> Unit) {
+    // 🌟 フリック対応のための新しいタッチ処理リスナー
+    private fun setupFastKey(
+        button: TextView,
+        onClick: () -> Unit,
+        onSetupPopup: () -> Pair<PopupWindow, List<Pair<View, String>>>?
+    ) {
         val handler = Handler(Looper.getMainLooper())
         var isLongPress = false
         var runnable: Runnable? = null
+        var isDragging = false
+        var startX = 0f
+        var startY = 0f
+
         button.setOnTouchListener { v, event ->
+            val rawX = event.rawX
+            val rawY = event.rawY
+
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    isLongPress = false; v.isPressed = true
-                    runnable = Runnable { isLongPress = true; onLongPress() }
-                    handler.postDelayed(runnable!!, 150L); true
+                    isLongPress = false
+                    isDragging = false
+                    startX = rawX
+                    startY = rawY
+                    v.isPressed = true
+                    runnable = Runnable {
+                        isLongPress = true
+                        val result = onSetupPopup()
+                        if (result != null) {
+                            activePopup = result.first
+                            currentPopupOptions = result.second
+                            activePopup?.setOnDismissListener {
+                                if (activePopup == result.first) {
+                                    activePopup = null
+                                    currentPopupOptions = emptyList()
+                                    hoveredOption = null
+                                }
+                            }
+                        }
+                    }
+                    handler.postDelayed(runnable!!, 200L) // 少し余裕を持たせて誤爆防止
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!isDragging && (Math.abs(rawX - startX) > 15f || Math.abs(rawY - startY) > 15f)) {
+                        isDragging = true
+                    }
+                    // 🌟 ドラッグ中の選択肢ハイライト処理
+                    if (isLongPress && activePopup != null && activePopup!!.isShowing && currentPopupOptions.isNotEmpty()) {
+                        var foundHover: View? = null
+                        for ((optionView, _) in currentPopupOptions) {
+                            val loc = IntArray(2)
+                            optionView.getLocationOnScreen(loc)
+                            // 選択しやすくするため、ヒットボックスを上下左右に20px広げる
+                            val rect = android.graphics.Rect(loc[0] - 20, loc[1] - 20, loc[0] + optionView.width + 20, loc[1] + optionView.height + 20)
+                            if (rect.contains(rawX.toInt(), rawY.toInt())) {
+                                foundHover = optionView
+                                break
+                            }
+                        }
+
+                        if (hoveredOption != foundHover) {
+                            hoveredOption?.setBackgroundResource(getRippleResource()) // ハイライト解除
+                            hoveredOption = foundHover
+                            hoveredOption?.setBackgroundColor(Color.parseColor("#B3D4FF")) // 淡いブルーでハイライト
+                        }
+                    }
+                    true
                 }
                 MotionEvent.ACTION_UP -> {
                     v.isPressed = false
                     if (runnable != null) handler.removeCallbacks(runnable!!)
-                    if (!isLongPress) onClick(); true
+
+                    // 🌟 フリック入力の確定処理
+                    if (isLongPress && activePopup != null && activePopup!!.isShowing) {
+                        if (hoveredOption != null) {
+                            // 選択肢の上で指を離した場合は入力する
+                            val textToCommit = currentPopupOptions.firstOrNull { it.first == hoveredOption }?.second
+                            if (textToCommit != null) {
+                                currentInputConnection?.commitText(textToCommit, 1)
+                                if (shiftState == ShiftState.SHIFTED) {
+                                    shiftState = ShiftState.NORMAL
+                                    updateShiftButtonUI()
+                                    updateKeyboardLabels()
+                                }
+                            }
+                            activePopup?.dismiss()
+                        } else if (isDragging && currentPopupOptions.isNotEmpty()) {
+                            // ドラッグして選択肢以外で離した場合はキャンセル（ポップアップを閉じる）
+                            activePopup?.dismiss()
+                        }
+                        // ドラッグせずに離した場合は、ポップアップを表示したままにする（タップ入力を許可）
+                    } else if (!isLongPress) {
+                        onClick()
+                    }
+                    true
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     v.isPressed = false
                     if (runnable != null) handler.removeCallbacks(runnable!!)
+                    activePopup?.dismiss()
                     true
                 }
                 else -> false
@@ -141,10 +230,9 @@ class MathKeyboardService : InputMethodService() {
                     currentInputConnection?.commitText(textToInput, 1)
                     if (shiftState == ShiftState.SHIFTED) { shiftState = ShiftState.NORMAL; updateShiftButtonUI(); updateKeyboardLabels() }
                 },
-                onLongPress = {
+                onSetupPopup = {
                     val isUpper = (shiftState == ShiftState.SHIFTED || shiftState == ShiftState.CAPSLOCKED)
 
-                    // 1. 各フォントの候補をシフト状態で切り替え
                     val fontOptions = if (isUpper) {
                         listOf(
                             getCustomText(buttonId, "normalShift", keyData.normalShift),
@@ -163,7 +251,6 @@ class MathKeyboardService : InputMethodService() {
                         )
                     }
 
-                    // 2. 長押し専用カスタムリストもシフト状態で切り替え
                     val lpNormalString = getCustomText(buttonId, "longPressNormal", keyData.longPressNormal.joinToString(" "))
                     val lpShiftString = getCustomText(buttonId, "longPressShift", keyData.longPressShift.joinToString(" "))
 
@@ -173,40 +260,54 @@ class MathKeyboardService : InputMethodService() {
                         lpNormalString.split(" ").filter { it.isNotEmpty() }
                     }
 
-                    // 🌟 3. 全ての候補を結合し、空文字を消して重複を排除（ここで完全に1つにまとめる）
                     val allOptions = (fontOptions + customSymbolList).filter { it.isNotEmpty() }.distinct()
 
-                    val mainLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE); setPadding(8, 8, 8, 8) }
-                    val popupWindow = PopupWindow(mainLayout, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply { setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)); elevation = 20f }
+                    // 🌟 透過度85%のグレー背景
+                    val mainLayout = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setBackgroundColor(Color.parseColor("#D9E6E6E6"))
+                        setPadding(8, 8, 8, 8)
+                    }
+                    val popupWindow = PopupWindow(mainLayout, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+                        setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                        elevation = 20f
+                    }
+
+                    // フリック判定用のリストを保持
+                    val optionsList = mutableListOf<Pair<View, String>>()
 
                     fun addRow(chars: List<String>) {
                         if (chars.isEmpty()) return
                         val rowLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                         for (char in chars) {
-                            rowLayout.addView(TextView(this).apply {
+                            val textView = TextView(this).apply {
                                 text = char; isSingleLine = true; textSize = if (char.length > 3) 14f else 18f
                                 setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundResource(rippleResId); setPadding(20, 0, 20, 0)
                                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 140); minWidth = 100
                                 setOnClickListener {
                                     currentInputConnection?.commitText(char, 1)
                                     popupWindow.dismiss()
-
-                                    // ポップアップから入力した後、1回シフトなら通常モードに戻す
                                     if (shiftState == ShiftState.SHIFTED) {
                                         shiftState = ShiftState.NORMAL
                                         updateShiftButtonUI()
                                         updateKeyboardLabels()
                                     }
                                 }
-                            })
+                            }
+                            rowLayout.addView(textView)
+                            optionsList.add(textView to char)
                         }
                         mainLayout.addView(rowLayout)
                     }
 
-                    // 🌟 4. 重複をなくしたリストを4個ずつ改行して表示する
                     allOptions.chunked(4).forEach { addRow(it) }
 
-                    if (mainLayout.childCount > 0) { popupWindow.showAsDropDown(button, 0, -button.height - (140 * mainLayout.childCount) - 40) }
+                    if (mainLayout.childCount > 0) {
+                        popupWindow.showAsDropDown(button, 0, -button.height - (140 * mainLayout.childCount) - 40)
+                        popupWindow to optionsList
+                    } else {
+                        null
+                    }
                 }
             )
         }
@@ -215,19 +316,34 @@ class MathKeyboardService : InputMethodService() {
         btnMode?.let { modeBtn ->
             setupFastKey(modeBtn,
                 onClick = {
-                    currentMode = InputMode.values()[(currentMode.ordinal + 1) % InputMode.values().size]
-                    modeBtn.text = currentMode.shortName; updateKeyboardLabels()
+                    currentCycleIndex = (currentCycleIndex + 1) % modeCycle.size
+                    currentMode = modeCycle[currentCycleIndex]
+                    modeBtn.text = currentMode.shortName
+                    updateKeyboardLabels()
                 },
-                onLongPress = {
-                    val popupView = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.parseColor("#EEEEEE")); setPadding(12, 12, 12, 12) }
-                    val popupWindow = PopupWindow(popupView, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply { setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)); elevation = 20f }
+                onSetupPopup = {
+                    // 左下ボタンは透過させない（完全に不透明な #EEEEEE）
+                    val popupView = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setBackgroundColor(Color.parseColor("#EEEEEE"))
+                        setPadding(12, 12, 12, 12)
+                    }
+                    val popupWindow = PopupWindow(popupView, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+                        setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                        elevation = 20f
+                    }
 
                     val modeLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                     InputMode.values().forEach { m ->
                         modeLayout.addView(TextView(this).apply {
                             text = m.displayName; textSize = 15f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
                             setBackgroundResource(rippleResId); layoutParams = LinearLayout.LayoutParams(260, 130).apply { setMargins(0, 4, 0, 4) }
-                            setOnClickListener { currentMode = m; modeBtn.text = m.shortName; updateKeyboardLabels(); popupWindow.dismiss() }
+                            setOnClickListener {
+                                currentMode = m
+                                modeBtn.text = m.shortName
+                                updateKeyboardLabels()
+                                popupWindow.dismiss()
+                            }
                         })
                     }
 
@@ -244,7 +360,6 @@ class MathKeyboardService : InputMethodService() {
                     val settingLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 16, 16, 16) }
                     settingScroll.addView(settingLayout)
 
-                    // カテゴリ一覧
                     KeyDatabase.extraSymbols.forEach { (category, symbols) ->
                         categoryLayout.addView(TextView(this).apply {
                             text = category; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
@@ -278,10 +393,8 @@ class MathKeyboardService : InputMethodService() {
                         setOnClickListener { categoryScroll.visibility = View.GONE; settingScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 650; rightFrame.requestLayout() }
                     })
 
-                    // 🌟 設定画面（文字色反転ボタンの追加）
                     settingLayout.addView(TextView(this).apply { text = "◀ 戻る"; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#D0D0D0")); layoutParams = LinearLayout.LayoutParams(-1, 120).apply { setMargins(0,0,0,30) }; setOnClickListener { settingScroll.visibility = View.GONE; categoryScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 300; rightFrame.requestLayout() } })
 
-                    // 文字色トグル
                     val colorBtn = TextView(this).apply {
                         text = if (keyTextColor == Color.BLACK) "文字色を反転 (現在: 黒)" else "文字色を反転 (現在: 白)"
                         textSize = 14f; setTextColor(Color.BLACK); setPadding(0, 0, 0, 30)
@@ -303,6 +416,9 @@ class MathKeyboardService : InputMethodService() {
                     categoryScroll.addView(categoryLayout); rightFrame.addView(categoryScroll); rightFrame.addView(symbolScroll); rightFrame.addView(settingScroll)
                     popupView.addView(modeLayout); popupView.addView(rightFrame)
                     popupWindow.showAsDropDown(modeBtn, 0, -modeBtn.height - 830 - 40)
+
+                    // モードボタンにはフリック選択リストを渡さない（空のリスト）
+                    popupWindow to emptyList()
                 }
             )
         }
