@@ -8,7 +8,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import android.view.View // 🌟 これが必要
+import android.view.View
 
 class KeyEditorActivity : AppCompatActivity() {
 
@@ -67,7 +67,7 @@ class KeyEditorActivity : AppCompatActivity() {
             val previewText = TextView(this).apply {
                 val s = prefs.getString("key_${id}_normalShift", data.normalShift)
                 val bb = prefs.getString("key_${id}_blackboard", data.blackboard)
-                val lp = prefs.getString("key_${id}_longPress", data.longPressOptions.joinToString(" "))
+                val lp = prefs.getString("key_${id}_longPress", data.longPressNormal.joinToString(" "))
                 text = "Shift: $s  BB: $bb  長押し: $lp"
                 textSize = 12f
                 setTextColor(Color.GRAY)

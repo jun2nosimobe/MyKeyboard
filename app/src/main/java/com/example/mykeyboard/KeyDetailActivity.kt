@@ -45,8 +45,9 @@ class KeyDetailActivity : AppCompatActivity() {
         val editScript = createEditField("筆記体 (Script)", "key_${keyId}_script", data.mathscript)
         val editScriptShift = createEditField("筆記体・シフト", "key_${keyId}_scriptShift", data.mathscriptShift)
         val editSymbol = createEditField("記号 (MathSymbol)", "key_${keyId}_symbol", data.mathsymbol) // 🌟 追加
-        val editSymbolShift = createEditField("記号・シフト時", "key_${keyId}_symbolShift", data.mathsymbolShift)
-        val editLP     = createEditField("長押し (スペース区切り)", "key_${keyId}_longPress", data.longPressOptions.joinToString(" "))
+        val editSymbolShift = createEditField("記号・シフト時", "key_${keyId}_symbolShift", data.mathsymbolShift)// 変更後 🌟
+        val editLPNormal = createEditField("長押し・通常 (スペース区切り)", "key_${keyId}_longPressNormal", data.longPressNormal.joinToString(" "))
+        val editLPShift  = createEditField("長押し・シフト (スペース区切り)", "key_${keyId}_longPressShift", data.longPressShift.joinToString(" "))
         // 保存ボタン
         val saveBtn = Button(this).apply {
             text = "このキーの設定を保存"
@@ -63,8 +64,9 @@ class KeyDetailActivity : AppCompatActivity() {
                     putString("key_${keyId}_script", editScript.text.toString())
                     putString("key_${keyId}_scriptShift", editScriptShift.text.toString())
                     putString("key_${keyId}_symbol", editSymbol.text.toString())
-                    putString("key_${keyId}_symbolShift", editSymbolShift.text.toString()) // 🌟 保存
-                    putString("key_${keyId}_longPress", editLP.text.toString())
+                    putString("key_${keyId}_symbolShift", editSymbolShift.text.toString())
+                    putString("key_${keyId}_longPressNormal", editLPNormal.text.toString())
+                    putString("key_${keyId}_longPressShift", editLPShift.text.toString())
                     apply()
                 }
                 Toast.makeText(context, "保存しました", Toast.LENGTH_SHORT).show()

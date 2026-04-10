@@ -143,26 +143,69 @@ class MathKeyboardService : InputMethodService() {
                 },
                 onLongPress = {
                     val isUpper = (shiftState == ShiftState.SHIFTED || shiftState == ShiftState.CAPSLOCKED)
-                    val fontOptions = listOf(getCustomText(buttonId, "blackboard", keyData.blackboard), getCustomText(buttonId, "greek", keyData.greek), getCustomText(buttonId, "script", keyData.mathscript), getCustomText(buttonId, "fraktur", keyData.fraktur))
-                    val lpString = getCustomText(buttonId, "longPress", keyData.longPressOptions.joinToString(" "))
-                    val customSymbolList = lpString.split(" ").filter { it.isNotEmpty() }
+
+                    // 1. 各フォントの候補をシフト状態で切り替え
+                    val fontOptions = if (isUpper) {
+                        listOf(
+                            getCustomText(buttonId, "normalShift", keyData.normalShift),
+                            getCustomText(buttonId, "blackboardShift", keyData.blackboardShift),
+                            getCustomText(buttonId, "greekShift", keyData.greekShift),
+                            getCustomText(buttonId, "scriptShift", keyData.mathscriptShift),
+                            getCustomText(buttonId, "frakturShift", keyData.frakturShift)
+                        )
+                    } else {
+                        listOf(
+                            getCustomText(buttonId, "normal", keyData.normal),
+                            getCustomText(buttonId, "blackboard", keyData.blackboard),
+                            getCustomText(buttonId, "greek", keyData.greek),
+                            getCustomText(buttonId, "script", keyData.mathscript),
+                            getCustomText(buttonId, "fraktur", keyData.fraktur)
+                        )
+                    }
+
+                    // 2. 長押し専用カスタムリストもシフト状態で切り替え
+                    val lpNormalString = getCustomText(buttonId, "longPressNormal", keyData.longPressNormal.joinToString(" "))
+                    val lpShiftString = getCustomText(buttonId, "longPressShift", keyData.longPressShift.joinToString(" "))
+
+                    val customSymbolList = if (isUpper) {
+                        lpShiftString.split(" ").filter { it.isNotEmpty() }
+                    } else {
+                        lpNormalString.split(" ").filter { it.isNotEmpty() }
+                    }
+
+                    // 🌟 3. 全ての候補を結合し、空文字を消して重複を排除（ここで完全に1つにまとめる）
+                    val allOptions = (fontOptions + customSymbolList).filter { it.isNotEmpty() }.distinct()
+
                     val mainLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.WHITE); setPadding(8, 8, 8, 8) }
                     val popupWindow = PopupWindow(mainLayout, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply { setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT)); elevation = 20f }
+
                     fun addRow(chars: List<String>) {
-                        val validChars = chars.filter { it.isNotEmpty() }.distinct()
-                        if (validChars.isEmpty()) return
+                        if (chars.isEmpty()) return
                         val rowLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                        for (char in validChars) {
+                        for (char in chars) {
                             rowLayout.addView(TextView(this).apply {
                                 text = char; isSingleLine = true; textSize = if (char.length > 3) 14f else 18f
                                 setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundResource(rippleResId); setPadding(20, 0, 20, 0)
                                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, 140); minWidth = 100
-                                setOnClickListener { currentInputConnection?.commitText(char, 1); popupWindow.dismiss() }
+                                setOnClickListener {
+                                    currentInputConnection?.commitText(char, 1)
+                                    popupWindow.dismiss()
+
+                                    // ポップアップから入力した後、1回シフトなら通常モードに戻す
+                                    if (shiftState == ShiftState.SHIFTED) {
+                                        shiftState = ShiftState.NORMAL
+                                        updateShiftButtonUI()
+                                        updateKeyboardLabels()
+                                    }
+                                }
                             })
                         }
                         mainLayout.addView(rowLayout)
                     }
-                    addRow(fontOptions); customSymbolList.chunked(4).forEach { addRow(it) }
+
+                    // 🌟 4. 重複をなくしたリストを4個ずつ改行して表示する
+                    allOptions.chunked(4).forEach { addRow(it) }
+
                     if (mainLayout.childCount > 0) { popupWindow.showAsDropDown(button, 0, -button.height - (140 * mainLayout.childCount) - 40) }
                 }
             )
@@ -190,54 +233,36 @@ class MathKeyboardService : InputMethodService() {
 
                     val rightFrame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams(300, 830).apply { setMargins(24, 0, 0, 0) } }
 
-                    // 🌟 記号カテゴリ一覧 (以前の機能)
                     val categoryScroll = ScrollView(this)
                     val categoryLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-                    // 🌟 記号表示エリア
                     val symbolScroll = ScrollView(this).apply { visibility = View.GONE }
                     val symbolLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                     symbolScroll.addView(symbolLayout)
 
-                    // 🌟 設定表示エリア
                     val settingScroll = ScrollView(this).apply { visibility = View.GONE }
                     val settingLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 16, 16, 16) }
                     settingScroll.addView(settingLayout)
 
-                    // 記号カテゴリの生成
+                    // カテゴリ一覧
                     KeyDatabase.extraSymbols.forEach { (category, symbols) ->
                         categoryLayout.addView(TextView(this).apply {
                             text = category; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
                             setBackgroundResource(rippleResId); layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 130).apply { setMargins(0, 4, 0, 4) }
                             setOnClickListener {
                                 symbolLayout.removeAllViews()
-                                // ヘッダー (戻る/Space/Delete)
                                 symbolLayout.addView(LinearLayout(this@MathKeyboardService).apply {
                                     orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120)
-                                    addView(TextView(this@MathKeyboardService).apply {
-                                        text = "◀ $category"; textSize = 13f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#D0D0D0"))
-                                        layoutParams = LinearLayout.LayoutParams(0, -1, 2f).apply { setMargins(0,0,4,0) }
-                                        setOnClickListener { symbolScroll.visibility = View.GONE; categoryScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 300; rightFrame.requestLayout() }
-                                    })
-                                    addView(TextView(this@MathKeyboardService).apply {
-                                        text = "Space"; textSize = 13f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#E0E0E0"))
-                                        layoutParams = LinearLayout.LayoutParams(0, -1, 1.5f).apply { setMargins(0,0,4,0) }
-                                        setOnClickListener { currentInputConnection?.commitText(" ", 1) }
-                                    })
-                                    addView(TextView(this@MathKeyboardService).apply {
-                                        text = "⌫"; textSize = 16f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#E0E0E0"))
-                                        layoutParams = LinearLayout.LayoutParams(0, -1, 1f)
-                                        setOnClickListener { currentInputConnection?.deleteSurroundingText(1, 0) }
-                                    })
+                                    addView(TextView(this@MathKeyboardService).apply { text = "◀ $category"; textSize = 13f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#D0D0D0")); layoutParams = LinearLayout.LayoutParams(0, -1, 2f).apply { setMargins(0,0,4,0) }; setOnClickListener { symbolScroll.visibility = View.GONE; categoryScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 300; rightFrame.requestLayout() } })
+                                    addView(TextView(this@MathKeyboardService).apply { text = "Space"; textSize = 13f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#E0E0E0")); layoutParams = LinearLayout.LayoutParams(0, -1, 1.5f).apply { setMargins(0,0,4,0) }; setOnClickListener { currentInputConnection?.commitText(" ", 1) } })
+                                    addView(TextView(this@MathKeyboardService).apply { text = "⌫"; textSize = 16f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#E0E0E0")); layoutParams = LinearLayout.LayoutParams(0, -1, 1f); setOnClickListener { currentInputConnection?.deleteSurroundingText(1, 0) } })
                                 })
-                                // 記号グリッド
                                 symbols.chunked(5).forEach { row ->
                                     symbolLayout.addView(LinearLayout(this@MathKeyboardService).apply {
                                         orientation = LinearLayout.HORIZONTAL
                                         row.forEach { sym -> addView(TextView(this@MathKeyboardService).apply {
                                             text = sym; textSize = 20f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
-                                            setBackgroundResource(rippleResId); layoutParams = LinearLayout.LayoutParams(110, 120).apply { setMargins(1,1,1,1) }
-                                            setOnClickListener { currentInputConnection?.commitText(sym, 1) }
+                                            setBackgroundResource(rippleResId); layoutParams = LinearLayout.LayoutParams(110, 120).apply { setMargins(1,1,1,1) }; setOnClickListener { currentInputConnection?.commitText(sym, 1) }
                                         }) }
                                     })
                                 }
@@ -253,8 +278,22 @@ class MathKeyboardService : InputMethodService() {
                         setOnClickListener { categoryScroll.visibility = View.GONE; settingScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 650; rightFrame.requestLayout() }
                     })
 
-                    // 設定画面の構築
-                    settingLayout.addView(TextView(this).apply { text = "◀ 戻る"; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#D0D0D0")); layoutParams = LinearLayout.LayoutParams(-1, 120).apply { setMargins(0,0,0,40) }; setOnClickListener { settingScroll.visibility = View.GONE; categoryScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 300; rightFrame.requestLayout() } })
+                    // 🌟 設定画面（文字色反転ボタンの追加）
+                    settingLayout.addView(TextView(this).apply { text = "◀ 戻る"; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(Color.parseColor("#D0D0D0")); layoutParams = LinearLayout.LayoutParams(-1, 120).apply { setMargins(0,0,0,30) }; setOnClickListener { settingScroll.visibility = View.GONE; categoryScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 300; rightFrame.requestLayout() } })
+
+                    // 文字色トグル
+                    val colorBtn = TextView(this).apply {
+                        text = if (keyTextColor == Color.BLACK) "文字色を反転 (現在: 黒)" else "文字色を反転 (現在: 白)"
+                        textSize = 14f; setTextColor(Color.BLACK); setPadding(0, 0, 0, 30)
+                        setOnClickListener {
+                            keyTextColor = if (keyTextColor == Color.BLACK) Color.WHITE else Color.BLACK
+                            prefs.edit().putInt("keyTextColor", keyTextColor).apply()
+                            updateAllTextColors()
+                            text = if (keyTextColor == Color.BLACK) "文字色を反転 (現在: 黒)" else "文字色を反転 (現在: 白)"
+                        }
+                    }
+                    settingLayout.addView(colorBtn)
+
                     settingLayout.addView(TextView(this).apply { text = "画像の透過率"; setTextColor(Color.BLACK) })
                     settingLayout.addView(SeekBar(this).apply { max = 100; progress = (prefs.getFloat("bgAlpha", 0.4f) * 100).toInt(); setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener { override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) { keyboardView.findViewById<ImageView>(R.id.keyboard_bg)?.alpha = p/100f; prefs.edit().putFloat("bgAlpha", p/100f).apply() }; override fun onStartTrackingTouch(s: SeekBar?) {}; override fun onStopTrackingTouch(s: SeekBar?) {} }) })
                     settingLayout.addView(TextView(this).apply { text = "背景の明るさ"; setTextColor(Color.BLACK); setPadding(0,20,0,0) })
