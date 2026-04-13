@@ -2,233 +2,71 @@ package com.example.mykeyboard // ← ご自身の環境に合わせてくださ
 
 // 1つのキーが持つすべての情報をまとめた「箱」
 data class KeyData(
-    val normal: String, val normalShift: String,
-    val blackboard: String, val blackboardShift: String,
-    val fraktur: String, val frakturShift: String,
-    val greek: String, val greekShift: String,
-    val mathscript: String, val mathscriptShift: String,
-    val mathsymbol: String, val mathsymbolShift: String,
-    val longPressNormal: List<String>, // ← これと
-    val longPressShift: List<String>   // ← これに変更
+    val normal: String,
+    val normalShift: String,
+    val longPressNormal: List<String>,
+    val longPressShift: List<String>
 )
 
-object KeyDatabase {val keys = mapOf(
-    // ==========================================
-    // アルファベット (A ~ Z)
-    // ==========================================
-    R.id.btn_a to KeyData("a", "A", "𝕒", "𝔸", "𝔞", "𝔄", "α", "Α", "𝒶", "𝒜", "∀", "&",
-        listOf("∀", "@", "angle"),
-        listOf("&", "ℵ", "@", "angle")),
+object KeyDatabase {
+    val keys = mapOf(
+        // アルファベット
+        R.id.btn_a to KeyData("a", "A", listOf("∀", "@", "angle"), listOf("&", "ℵ", "@", "angle")),
+        R.id.btn_b to KeyData("b", "B", listOf("∵", "ב", "begin", "bmod"), listOf("♭", "ב", "begin", "bmod")),
+        R.id.btn_c to KeyData("c", "C", listOf("⊂", "⊄", "cos", "cot"), listOf("⊆", "⊈", "⊊", "℃", "cos", "cot")),
+        R.id.btn_d to KeyData("d", "D", listOf("∂", "°", "†", "≝", "det", "deg", "dim"), listOf("∇", "Ð", "≝", "det", "deg", "displaystyle")),
+        R.id.btn_e to KeyData("e", "E", listOf("∃", "∈", "∄", "∉", "ϵ", "end", "exp"), listOf("∈", "∉", "End", "exp")),
+        R.id.btn_f to KeyData("f", "F", listOf("∫", "∮", "Φ", "↻", "frac"), listOf("∬", "∮", "↻", "dfrac")),
+        R.id.btn_g to KeyData("g", "G", listOf("≥", "≫", "gcd"), listOf("≧", "≫", "gcd")),
+        R.id.btn_h to KeyData("h", "H", listOf("#", "♡", "ℏ", "hom", "hat"), listOf("⇔", "♡", "Hom", "hat")),
+        R.id.btn_i to KeyData("i", "I", listOf("∞", "int", "im", "inf"), listOf("!", "∝", "int", "iint", "Im", "inf")),
+        R.id.btn_j to KeyData("j", "J", listOf("<", "∠", "∡"), listOf(">", "∠", "∡")),
+        R.id.btn_k to KeyData("k", "K", listOf("≅", "≇", "ker"), listOf("≡", "≢", "Ker")),
+        R.id.btn_l to KeyData("l", "L", listOf("≤", "ł", "≪", "ℓ", "lim", "log", "ln"), listOf("≦", "Ł", "≪", "colim", "Log", "ln")),
+        R.id.btn_m to KeyData("m", "M", listOf("|", "∓", "mid", "max", "min", "pmod"), listOf("?", "∓", "mid", "max", "min", "pmod")),
+        R.id.btn_n to KeyData("n", "N", listOf("≠", "∉", "♮"), listOf("¬", "∉", "♮", "nabla")),
+        R.id.btn_o to KeyData("o", "O", listOf("⊕", "oplus"), listOf("∅", "bigoplus")),
+        R.id.btn_p to KeyData("p", "P", listOf("∏", "%", "℘", "prod", "partial"), listOf("∐", "%", "℘", "coprod", "partial")),
+        R.id.btn_q to KeyData("q", "Q", listOf("≃", "?", "□", "quad"), listOf("∎", "?", "□", "quad")),
+        R.id.btn_r to KeyData("r", "R", listOf("∋", "∌", "√", "∛", "rho"), listOf("∋", "∌", "∛", "Rho")),
+        R.id.btn_s to KeyData("s", "S", listOf("∑", "\$", "sin", "sum", "sup"), listOf("∼", "§", "ς", "\$", "sin", "sum", "sup")),
+        R.id.btn_t to KeyData("t", "T", listOf("∴", "™", "tan", "times"), listOf("△", "Þ", "tan", "times")),
+        R.id.btn_u to KeyData("u", "U", listOf("∪"), listOf("⋁")),
+        R.id.btn_v to KeyData("v", "V", listOf("⊃", "⊅", "✓"), listOf("⊇", "⊉", "⊋", "✓")),
+        R.id.btn_w to KeyData("w", "W", listOf("→", "↔", "↑", "↓", "wedge"), listOf("←", "↔", "↑", "↓", "Ω", "wedge")),
+        R.id.btn_x to KeyData("x", "X", listOf("×", "⊠", "⋊"), listOf("⊗", "⊠", "⋊", "⋉")),
+        R.id.btn_y to KeyData("y", "Y", listOf("⋂", "¥", "よ"), listOf("⋀", "¥", "よ")),
+        R.id.btn_z to KeyData("z", "Z", listOf("⇒", "⇔", "⇄", "zeta"), listOf("⇐", "⇔", "⇄", "Zeta")),
 
-    R.id.btn_b to KeyData("b", "B", "𝕓", "𝔹", "𝔟", "𝔅", "β", "Β", "𝒷", "ℬ", "∵", "♭",
-        listOf("∵", "ב", "bmod"),
-        listOf("♭", "ב", "bmod")),
+        // 数字
+        R.id.btn_1 to KeyData("1", "1", listOf("¹", "₁", "𝟙", "½", "⅓", "¼"), listOf("!", "¹", "₁", "𝟙", "½", "⅓", "¼")),
+        R.id.btn_2 to KeyData("2", "2", listOf("²", "₂", "𝟚", "⅔"), listOf("\"", "²", "₂", "𝟚", "⅔")),
+        R.id.btn_3 to KeyData("3", "3", listOf("³", "₃", "𝟛", "¾"), listOf("#", "³", "₃", "𝟛", "¾")),
+        R.id.btn_4 to KeyData("4", "4", listOf("⁴", "₄", "𝟜"), listOf("\$", "⁴", "₄", "𝟜")),
+        R.id.btn_5 to KeyData("5", "5", listOf("⁵", "₅", "𝟝"), listOf("%", "⁵", "₅", "𝟝")),
+        R.id.btn_6 to KeyData("6", "6", listOf("⁶", "₆", "𝟞"), listOf("&", "⁶", "₆", "𝟞")),
+        R.id.btn_7 to KeyData("7", "7", listOf("⁷", "₇", "𝟟"), listOf("'", "⁷", "₇", "𝟟")),
+        R.id.btn_8 to KeyData("8", "8", listOf("⁸", "₈", "𝟠"), listOf("(", "⁸", "₈", "𝟠")),
+        R.id.btn_9 to KeyData("9", "9", listOf("⁹", "₉", "𝟡"), listOf(")", "⁹", "₉", "𝟡")),
+        R.id.btn_0 to KeyData("0", "0", listOf("⁰", "₀", "𝟘", "°", "∅", "Ø"), listOf("⁰", "₀", "𝟘", "°", "∅", "Ø")),
 
-    R.id.btn_c to KeyData("c", "C", "𝕔", "ℂ", "𝔠", "ℭ", "χ", "Χ", "𝒸", "𝒞", "⊂", "⊆",
-        listOf("⊂", "⊄",  "cos", "cot"),
-        listOf("⊆", "⊈", "⊊","℃", "cos", "cot")),
+        // 記号
+        R.id.btn_plus to KeyData("+", "+", listOf("±", "＋", "⁺", "₊"), listOf(";", "±", "＋", "⁺", "₊")),
+        R.id.btn_minus to KeyData("-", "-", listOf("—", "–", "∓", "⁻", "₋"), listOf("=", "—", "–", "∓", "⁻", "₋")),
+        R.id.btn_asterisk to KeyData("*", "*", listOf("×", "⊗", "∙", "∘", "cdot", "times", "★"), listOf(":", "×", "⊗", "∙", "∘", "cdot", "times", "★")),
+        R.id.btn_slash to KeyData("/", "/", listOf("÷", "／", "div"), listOf("?", "÷", "／", "div")),
+        R.id.btn_equal to KeyData("=", "=", listOf("≠", "⁼", "₌"), listOf("≠", "⁼", "₌")),
+        R.id.btn_caret to KeyData("^", "^", listOf("\u0302", "\u0303", "\u0304", "\u0307", "\u0308", "\u030A", "\u20D7", "\u0301", "\u0300", "\u030C", "∧", "↑"), listOf("\u0302", "\u0303", "\u0304", "\u0307", "\u0308", "\u030A", "\u20D7", "\u0301", "\u0300", "\u030C", "∧", "~", "↑")),
+        R.id.btn_underscore to KeyData("_", "_", listOf("＿", "↓", "\u0331", "\u0323", "\u0324", "\u0330", "\u00b8"), listOf("＿", "↓", "\u0331", "\u0323", "\u0324", "\u0330", "\u00b8")),
+        R.id.btn_backslash to KeyData("\\", "\\", listOf("＼", "∖", "\u0338", "\u20DD", "\u20DE", "\u20E1"), listOf("＼", "∖", "\u0338", "\u20DD", "\u20DE", "\u20E1")),
+        R.id.btn_paren_l to KeyData("(", "[", listOf("[", "⟨", "「"), listOf("[", "⟨", "「")),
+        R.id.btn_paren_r to KeyData(")", "]", listOf("]", "⟩", "」"), listOf("]", "⟩", "」")),
+        R.id.btn_brace_l to KeyData("{", "{", listOf("<", "≤", "≦"), listOf("<", "≤", "≦")),
+        R.id.btn_brace_r to KeyData("}", "}", listOf(">", "≥", "≧"), listOf(">", "≥", "≧")),
+        R.id.btn_comma to KeyData(",", ",", listOf("∙", ":", ";", "，", "、"), listOf("∙", ":", ";", "，", "、")),
+        R.id.btn_period to KeyData(".", ".", listOf(":", ";", "\"", "'", "`", "．", "。"), listOf(":", ";", "\"", "'", "`", "?", "!", "．", "。"))
+    )
 
-    R.id.btn_d to KeyData("d", "D", "𝕕", "𝔻", "𝔡", "𝔇", "δ", "Δ", "𝒹", "𝒟", "∂", "∇",
-        listOf("∂", "°", "†", "≝", "det", "deg"),
-        listOf("∇", "Ð", "≝", "det", "deg", "displaystyle")), // det等は小文字のまま
-
-    R.id.btn_e to KeyData("e", "E", "𝕖", "𝔼", "𝔢", "𝔈", "ε", "Ε", "ℯ", "ℰ", "∃", "∈",
-        listOf("∃","∈","∄","∉", "exp"),
-        listOf("∈","∉", "exp")),
-
-    R.id.btn_f to KeyData("f", "F", "𝕗", "𝔽", "𝔣", "𝔉", "φ", "Φ", "𝒻", "ℱ", "∫", "∬",
-        listOf("∫", "∮", "↻", "frac"),
-        listOf("∬", "∮", "↻", "dfrac")),
-
-    R.id.btn_g to KeyData("g", "G", "𝕘", "𝔾", "𝔤", "𝔊", "γ", "Γ", "ℊ", "𝒢", "≥", "≧",
-        listOf("≥", "≫", "gcd"),
-        listOf("≧", "≫", "gcd")),
-
-    R.id.btn_h to KeyData("h", "H", "𝕙", "ℍ", "𝔥", "ℌ", "η", "Η", "𝒽", "ℋ", "#", "⇔",
-        listOf("#", "♡", "ℏ", "hat"),
-        listOf("⇔", "♡", "hat")),
-
-    R.id.btn_i to KeyData("i", "I", "𝕚", "𝕀", "𝔦", "ℑ", "ι", "Ι", "𝒾", "ℐ", "∞", "!",
-        listOf("∞", "int", "im","inf"),
-        listOf("!", "∝", "int", "iint", "Im","inf")),
-
-    R.id.btn_j to KeyData("j", "J", "𝕛", "𝕁", "𝔧", "𝔍", "θ", "Θ", "𝒿", "𝒥", "<", ">",
-        listOf("<", "∠", "∡"),
-        listOf(">", "∠", "∡")),
-
-    R.id.btn_k to KeyData("k", "K", "𝕜", "𝕂", "𝔨", "𝔎", "κ", "Κ", "𝓀", "𝒦", "≅", "≡",
-        listOf("≅", "≇", "ker"),
-        listOf("≡",  "≢", "Ker")),
-
-    R.id.btn_l to KeyData("l", "L", "𝕝", "𝕃", "𝔩", "𝔏", "λ", "Λ", "𝓁", "ℒ", "≤", "≦",
-        listOf("≤", "ł", "≪", "ℓ", "lim", "log", "ln"),
-        listOf("≦", "Ł", "≪", "colim", "Log", "ln")),
-
-    R.id.btn_m to KeyData("m", "M", "𝕞", "𝕄", "𝔪", "𝔐", "μ", "Μ", "𝓂", "ℳ", "|", "?",
-        listOf("|", "∓", "mid", "max", "min", "pmod"),
-        listOf("?", "∓", "mid", "max", "min", "pmod")),
-
-    R.id.btn_n to KeyData("n", "N", "𝕟", "ℕ", "𝔫", "𝔑", "ν", "Ν", "𝓃", "𝒩", "≠", "¬",
-        listOf("≠", "∉", "♮", "ⁿ","ₙ"),
-        listOf("¬", "∉", "♮", "nabla")),
-
-    R.id.btn_o to KeyData("o", "O", "𝕠", "𝕆", "𝔬", "𝔒", "ο", "Ο", "ℴ", "𝒪", "⊕", "∅",
-        listOf("⊕", "oplus"),
-        listOf("∅", "bigoplus")),
-
-    R.id.btn_p to KeyData("p", "P", "𝕡", "ℙ", "𝔭", "𝔓", "π", "Π", "𝓅", "𝒫", "∏", "∐",
-        listOf("∏", "%", "℘", "prod", "partial"),
-        listOf("∐", "%", "℘", "coprod", "partial")),
-
-    R.id.btn_q to KeyData("q", "Q", "𝕢", "ℚ", "𝔮", "𝔔", "ψ", "Ψ", "𝓆", "𝒬", "≃", "∎",
-        listOf("≃", "?", "□", "quad"),
-        listOf("∎", "?", "□", "quad")),
-
-    R.id.btn_r to KeyData("r", "R", "𝕣", "ℝ", "𝔯", "ℜ", "ρ", "Ρ", "𝓇", "ℛ", "√", "∋",
-        listOf("∋","∌","√", "∛", "rho"),
-        listOf("∋","∌", "∛", "Rho")), // rho -> Rho
-
-    R.id.btn_s to KeyData("s", "S", "𝕤", "𝕊", "𝔰", "𝔖", "σ", "Σ", "𝓈", "𝒮", "∑", "∼",
-        listOf("∑", "sin", "sum", "sup"),
-        listOf("∼", "§", "ς", "\$", "sin", "sum", "sup")),
-
-    R.id.btn_t to KeyData("t", "T", "𝕥", "𝕋", "𝔱", "𝔗", "τ", "Τ", "𝓉", "𝒯", "∴", "△",
-        listOf("∴", "™", "tan", "times"),
-        listOf("△", "Þ", "tan", "times")),
-
-    R.id.btn_u to KeyData("u", "U", "𝕦", "𝕌", "𝔲", "𝔘", "υ", "Υ", "𝓊", "𝒰", "∪", "⋁",
-        listOf("∪"),
-        listOf("⋁")),
-
-    R.id.btn_v to KeyData("v", "V", "𝕧", "𝕍", "𝔳", "𝔙", "ϖ", "ς", "𝓋", "𝒱", "⊃", "⊇",
-        listOf("⊃", "⊅", "✓"),
-        listOf("⊇", "⊉", "⊋", "✓")),
-
-    R.id.btn_w to KeyData("w", "W", "𝕨", "𝕎", "𝔴", "𝔚", "ω", "Ω", "𝓌", "𝒲", "→", "←",
-        listOf("→", "↔", "↑", "↓", "wedge"),
-        listOf("←", "↔", "↑", "↓", "Ω", "wedge")),
-
-    R.id.btn_x to KeyData("x", "X", "𝕩", "𝕏", "𝔵", "𝔛", "ξ", "Ξ", "𝓍", "𝒳", "×", "⊗",
-        listOf("×", "⊠", "⋉"),
-        listOf("⊗", "⊠", "⋉")),
-
-    R.id.btn_y to KeyData("y", "Y", "𝕪", "𝕐", "𝔶", "𝔜", "υ", "Υ", "𝓎", "𝒴", "⋂", "⋀",
-        listOf("⋂", "¥", "よ"),
-        listOf("⋀", "¥", "よ")),
-
-    R.id.btn_z to KeyData("z", "Z", "𝕫", "ℤ", "𝔷", "ℨ", "ζ", "Ζ", "𝓏", "𝒵", "⇒", "⇐",
-        listOf("⇒", "⇔", "⇄", "zeta"),
-        listOf("⇐", "⇔", "⇄", "Zeta")), // zeta -> Zeta
-
-
-
-    // ==========================================
-    // 数字 (0 ~ 9)
-    // ==========================================
-    R.id.btn_1 to KeyData("1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1",
-        listOf("¹", "₁", "𝟙", "½", "⅓", "¼"),
-        listOf("!","¹", "₁", "𝟙", "½", "⅓", "¼")),
-
-    R.id.btn_2 to KeyData("2", "2", "2", "2", "2", "2", "2", "2", "2", "2", "2", "2",
-        listOf("²", "₂", "𝟚", "⅔"),
-        listOf("\"","²", "₂", "𝟚", "⅔")),
-
-    R.id.btn_3 to KeyData("3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3",
-        listOf("³", "₃", "𝟛", "¾"),
-        listOf("#","³", "₃", "𝟛", "¾")),
-
-    R.id.btn_4 to KeyData("4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4",
-        listOf("⁴", "₄", "𝟜"),
-        listOf("\$","⁴", "₄", "𝟜")),
-
-    R.id.btn_5 to KeyData("5", "5", "5", "5", "5", "5", "5", "5", "5", "5", "5", "5",
-        listOf("⁵", "₅", "𝟝"),
-        listOf("%","⁵", "₅", "𝟝")),
-
-    R.id.btn_6 to KeyData("6", "6", "6", "6", "6", "6", "6", "6", "6", "6", "6", "6",
-        listOf("⁶", "₆", "𝟞"),
-        listOf("&","⁶", "₆", "𝟞")),
-
-    R.id.btn_7 to KeyData("7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7",
-        listOf("⁷", "₇", "𝟟"),
-        listOf("'","⁷", "₇", "𝟟")),
-
-    R.id.btn_8 to KeyData("8", "8", "8", "8", "8", "8", "8", "8", "8", "8", "8", "8",
-        listOf("⁸", "₈", "𝟠"),
-        listOf("(","⁸", "₈", "𝟠")),
-
-    R.id.btn_9 to KeyData("9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9",
-        listOf("⁹", "₉", "𝟡"),
-        listOf(")","⁹", "₉", "𝟡")),
-
-    R.id.btn_0 to KeyData("0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
-        listOf("⁰", "₀", "𝟘", "°", "∅","Ø"),
-        listOf("⁰", "₀", "𝟘", "°", "∅","Ø")),
-
-    // ==========================================
-    // 記号 (+, -, *, /, = など)
-    // ==========================================
-    R.id.btn_plus to KeyData("+", "+", "+", "+", "+", "+", "+", "+", "+", "+", "+", "+",
-        listOf("±","＋", "⁺", "₊"),
-        listOf(";","±","＋", "⁺", "₊")),
-
-    R.id.btn_minus to KeyData("-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-",
-        listOf("—", "–", "∓", "⁻", "₋"),
-        listOf("=","—", "–", "∓", "⁻", "₋")),
-
-    R.id.btn_asterisk to KeyData("*", "*", "*", "*", "*", "*", "*", "*", "*", "*", "*", "*",
-        listOf("×", "⊗","∙", "∘","cdot", "times", "★"),
-        listOf(":","×", "⊗","∙", "∘","cdot", "times", "★")),
-
-    R.id.btn_slash to KeyData("/", "/", "/", "/", "/", "/", "/", "/", "/", "/", "/", "⁄",
-        listOf("÷","／", "div"),
-        listOf("?","÷","／", "div")),
-
-    R.id.btn_equal to KeyData("=", "=", "=", "=", "=", "=", "=", "=", "=", "=", "=", "=",
-        listOf("≠", "⁼", "₌"),
-        listOf("≠", "⁼", "₌")),
-
-    // 🌟 変更箇所：上付き〇（\u030A）を追加
-    R.id.btn_caret to KeyData("^", "^", "^", "^", "^", "^", "^", "^", "^", "^", "^", "^",
-        // ハット, チルダ, バー, ドット, ダブルドット, リング(上付き〇), ベクトル矢印, アキュート, グレイヴ, カロン(v字), (既存の ∧, ↑)
-        listOf("\u0302", "\u0303", "\u0304", "\u0307", "\u0308", "\u030A", "\u20D7", "\u0301", "\u0300", "\u030C", "∧", "↑"),
-        listOf("\u0302", "\u0303", "\u0304", "\u0307", "\u0308", "\u030A", "\u20D7", "\u0301", "\u0300", "\u030C", "∧", "~", "↑")),
-
-// \u0331(下線), \u0323(下ドット), \u0324(下ダブルドット), \u0330(下チルダ)
-    R.id.btn_underscore to KeyData("_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_",
-        listOf("＿", "↓", "\u0331", "\u0323", "\u0324", "\u0330"),
-        listOf("＿", "↓", "\u0331", "\u0323", "\u0324", "\u0330")),
-
-    // 🌟 \キーの修正（その他の特殊修飾記号を追加）
-    // \u0338(打ち消し斜線), \u20DD(丸囲み), \u20DE(四角囲み), \u20E1(上両矢印)
-    R.id.btn_backslash to KeyData("\\", "\\", "\\", "\\", "\\", "\\", "\\", "\\", "\\", "\\", "\\", "\\",
-        listOf("＼", "∖", "\u0338", "\u20DD", "\u20DE", "\u20E1"),
-        listOf("＼", "∖", "\u0338", "\u20DD", "\u20DE", "\u20E1")),
-
-    R.id.btn_paren_l to KeyData("(", "[", "(", "[", "(", "[", "(", "[", "(", "[", "(", "[",
-        listOf("[", "⟨", "「"),
-        listOf("[", "⟨", "「")),
-
-    R.id.btn_paren_r to KeyData(")", "]", ")", "]", ")", "]", ")", "]", ")", "]", ")", "]",
-        listOf("]","⟩", "」"),
-        listOf("]","⟩", "」")),
-
-    R.id.btn_brace_l to KeyData("{", "{", "{", "{", "{", "{", "{", "{", "{", "{", "{", "{",
-        listOf("<", "≤", "≦"),
-        listOf("<", "≤", "≦")),
-
-    R.id.btn_brace_r to KeyData("}", "}", "}", "}", "}", "}", "}", "}", "}", "}", "}", "}",
-        listOf(">", "≥", "≧"),
-        listOf(">", "≥", "≧")),
-
-    R.id.btn_comma to KeyData(",", ",", ",", ",", ",", ",", ",", ",", ",", ",", ",", ",",
-        listOf("∙", ":", ";", "，", "、"),
-        listOf("∙", ":", ";", "，", "、")),
-
-    R.id.btn_period to KeyData(".", ".", ".", "∙", ".", "∙", ".", "∙", ".", "∙", ".", "∙",
-        listOf(":", ";", "\"","'", "`", "．", "。"),
-        listOf(":", ";", "\"","'", "`", "?", "!", "．", "。"))
-)
 
     // モード切替長押し用の特殊記号パレットデータ
     val extraSymbols = mapOf(

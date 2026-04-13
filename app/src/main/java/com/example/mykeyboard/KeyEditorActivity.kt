@@ -66,9 +66,8 @@ class KeyEditorActivity : AppCompatActivity() {
             // プレビュー（薄く並ぶ記号類）
             val previewText = TextView(this).apply {
                 val s = prefs.getString("key_${id}_normalShift", data.normalShift)
-                val bb = prefs.getString("key_${id}_blackboard", data.blackboard)
                 val lp = prefs.getString("key_${id}_longPress", data.longPressNormal.joinToString(" "))
-                text = "Shift: $s  BB: $bb  長押し: $lp"
+                text = "Shift: $s  長押し: $lp"
                 textSize = 12f
                 setTextColor(Color.GRAY)
                 maxLines = 1

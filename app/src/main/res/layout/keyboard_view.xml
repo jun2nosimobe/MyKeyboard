@@ -5,120 +5,145 @@
     android:layout_height="wrap_content"
     android:background="#ECECEC">
 
-    <ImageView
-        android:id="@+id/keyboard_bg"
+    <HorizontalScrollView
+        android:id="@+id/candidate_scroll"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_alignTop="@+id/keyboard_keys"
-        android:layout_alignBottom="@+id/keyboard_keys"
-        android:scaleType="centerCrop"
-        android:alpha="0.4" />
+        android:layout_height="45dp"
+        android:layout_alignParentTop="true"
+        android:background="#E6F5F5F5"
+        android:scrollbars="none"
+        android:visibility="gone">
 
-    <LinearLayout
-        android:id="@+id/keyboard_keys"
+        <LinearLayout
+            android:id="@+id/candidate_layout"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"/>
+    </HorizontalScrollView>
+
+    <RelativeLayout
+        android:id="@+id/keyboard_main_area"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="4dp">
+        android:layout_below="@id/candidate_scroll">
+
+        <ImageView
+            android:id="@+id/keyboard_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignTop="@+id/keyboard_keys"
+            android:layout_alignBottom="@+id/keyboard_keys"
+            android:scaleType="centerCrop"
+            android:alpha="0.4" />
 
         <LinearLayout
+            android:id="@+id/keyboard_keys"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <TextView android:id="@+id/btn_plus" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="+" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_minus" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="-" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_asterisk" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="*" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_slash" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="/" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_equal" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="=" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_caret" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="^" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_underscore" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="_" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_backslash" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="\\" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_paren_l" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="(" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_paren_r" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text=")" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_brace_l" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="{" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_brace_r" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="}" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+            android:orientation="vertical"
+            android:padding="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/btn_plus" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="+" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_minus" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="-" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_asterisk" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="*" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_slash" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="/" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_equal" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="=" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_caret" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="^" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_underscore" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="_" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_backslash" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="\\" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_paren_l" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="(" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_paren_r" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text=")" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_brace_l" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="{" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_brace_r" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="}" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/btn_1" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="1" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_2" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="2" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_3" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="3" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_4" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="4" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_5" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="5" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_6" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="6" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_7" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="7" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_8" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="8" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_9" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="9" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_0" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="0" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/btn_q" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="q" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_w" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="w" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_e" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="e" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_r" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="r" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_t" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="t" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_y" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="y" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_u" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="u" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_i" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="i" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_o" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="o" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_p" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="p" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+                <TextView android:id="@+id/btn_a" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="a" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_s" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="s" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_d" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="d" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_f" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="f" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_g" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="g" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_h" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="h" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_j" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="j" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_k" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="k" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_l" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="l" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/btn_shift" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1.5" android:text="⇧" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_z" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="z" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_x" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="x" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_c" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="c" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_v" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="v" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_b" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="b" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_n" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="n" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_m" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="m" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_delete" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1.5" android:text="⌫" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp">
+                <TextView android:id="@+id/btn_mode" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="2" android:text="NORMAL" android:gravity="center" android:clickable="true" android:background="#66BBDEFB" android:textSize="16sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_comma" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="," android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_space" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="3" android:text="Space" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_period" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="." android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
+                <TextView android:id="@+id/btn_enter" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="2" android:text="↵" android:gravity="center" android:clickable="true" android:background="#66C8E6C9" android:textSize="18sp" android:textColor="#000000" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="40dp" />
+
         </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <TextView android:id="@+id/btn_1" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="1" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_2" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="2" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_3" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="3" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_4" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="4" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_5" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="5" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_6" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="6" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_7" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="7" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_8" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="8" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_9" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="9" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_0" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="0" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <TextView android:id="@+id/btn_q" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="q" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_w" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="w" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_e" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="e" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_r" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="r" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_t" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="t" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_y" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="y" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_u" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="u" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_i" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="i" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_o" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="o" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_p" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="p" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp">
-            <TextView android:id="@+id/btn_a" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="a" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_s" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="s" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_d" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="d" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_f" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="f" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_g" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="g" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_h" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="h" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_j" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="j" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_k" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="k" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_l" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="l" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <TextView android:id="@+id/btn_shift" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1.5" android:text="⇧" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_z" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="z" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_x" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="x" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_c" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="c" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_v" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="v" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_b" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="b" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_n" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="n" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_m" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="m" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_delete" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1.5" android:text="⌫" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingTop="4dp">
-            <TextView android:id="@+id/btn_mode" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="2" android:text="NORMAL" android:gravity="center" android:clickable="true" android:background="#66BBDEFB" android:textSize="16sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_comma" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="," android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_space" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="3" android:text="Space" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_period" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="1" android:text="." android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
-            <TextView android:id="@+id/btn_enter" android:layout_width="0dp" android:layout_height="50dp" android:layout_weight="2" android:text="↵" android:gravity="center" android:clickable="true" android:background="#66C8E6C9" android:textSize="18sp" android:textColor="#000000" />
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="40dp" />
-
-    </LinearLayout>
-
+    </RelativeLayout>
 </RelativeLayout>
