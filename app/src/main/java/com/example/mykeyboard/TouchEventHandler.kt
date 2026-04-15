@@ -26,16 +26,17 @@ class TouchEventHandler(
     private var currentPopupOptions: List<Pair<View, String>> = emptyList()
     private var hoveredOption: View? = null
 
+    // 🌟 改善: メモリのゴミを出さないよう、座標計算用の配列を使い回す（ゼロ・アロケーション）
+    private val tempLoc = IntArray(2)
+
     override fun onTouch(v: View, event: MotionEvent): Boolean {
         val rawX = event.rawX
         val rawY = event.rawY
 
         when (event.action) {
+            // ACTION_DOWN は変更なし
             MotionEvent.ACTION_DOWN -> {
-                isLongPress = false
-                isDragging = false
-                startX = rawX
-                startY = rawY
+                isLongPress = false; isDragging = false; startX = rawX; startY = rawY
                 v.isPressed = true
                 runnable = Runnable {
                     isLongPress = true
@@ -45,9 +46,7 @@ class TouchEventHandler(
                         currentPopupOptions = result.second
                         activePopup?.setOnDismissListener {
                             if (activePopup == result.first) {
-                                activePopup = null
-                                currentPopupOptions = emptyList()
-                                hoveredOption = null
+                                activePopup = null; currentPopupOptions = emptyList(); hoveredOption = null
                             }
                         }
                     }
@@ -56,17 +55,22 @@ class TouchEventHandler(
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!isDragging && (Math.abs(rawX - startX) > 15f || Math.abs(rawY - startY) > 15f)) {
-                    isDragging = true
-                }
-                // ポップアップ選択中のホバー処理
+                if (!isDragging && (Math.abs(rawX - startX) > 15f || Math.abs(rawY - startY) > 15f)) isDragging = true
+
                 if (isLongPress && activePopup != null && activePopup!!.isShowing && currentPopupOptions.isNotEmpty()) {
                     var foundHover: View? = null
+                    val rx = rawX.toInt()
+                    val ry = rawY.toInt()
+
+                    // 🌟 改善: new Rect() や new IntArray() を一切使わずに高速判定
                     for ((optionView, _) in currentPopupOptions) {
-                        val loc = IntArray(2)
-                        optionView.getLocationOnScreen(loc)
-                        val rect = android.graphics.Rect(loc[0] - 20, loc[1] - 20, loc[0] + optionView.width + 20, loc[1] + optionView.height + 20)
-                        if (rect.contains(rawX.toInt(), rawY.toInt())) {
+                        optionView.getLocationOnScreen(tempLoc)
+                        val left = tempLoc[0] - 20
+                        val top = tempLoc[1] - 20
+                        val right = tempLoc[0] + optionView.width + 20
+                        val bottom = tempLoc[1] + optionView.height + 20
+
+                        if (rx in left..right && ry in top..bottom) {
                             foundHover = optionView
                             break
                         }
@@ -77,12 +81,10 @@ class TouchEventHandler(
                         hoveredOption?.setBackgroundColor(android.graphics.Color.parseColor("#B3D4FF"))
                     }
                 }
-                // 大きく動いたら長押し判定をキャンセル
-                if (!isLongPress && isDragging && Math.abs(rawY - startY) > 80f) {
-                    runnable?.let { handler.removeCallbacks(it) }
-                }
+                if (!isLongPress && isDragging && Math.abs(rawY - startY) > 80f) runnable?.let { handler.removeCallbacks(it) }
                 return true
             }
+
             MotionEvent.ACTION_UP -> {
                 v.isPressed = false
                 runnable?.let { handler.removeCallbacks(it) }
