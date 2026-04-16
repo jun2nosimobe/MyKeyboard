@@ -120,13 +120,11 @@ object TextProcessor {
         ic.commitText(textToCommit, 1)
     }
 
+    // 🚀 爆速版（IPC通信を排除したゼロ遅延コード）
     fun handleBackspace(ic: InputConnection?) {
         if (ic == null) return
-        val textBefore = ic.getTextBeforeCursor(2, 0) ?: ""
-        if (textBefore.length == 2 && Character.isSurrogatePair(textBefore[0], textBefore[1])) {
-            ic.deleteSurroundingText(2, 0)
-        } else {
-            ic.deleteSurroundingText(1, 0)
-        }
+        // ターゲットアプリに「Backspaceキーが押された」という信号だけを非同期で投げる
+        ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DEL))
+        ic.sendKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DEL))
     }
 }

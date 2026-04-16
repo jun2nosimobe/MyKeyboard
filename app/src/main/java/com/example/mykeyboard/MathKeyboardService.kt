@@ -90,22 +90,24 @@ class MathKeyboardService : InputMethodService() {
     private fun updateKeyboardLabels() {
         if (!::keyboardView.isInitialized) return
 
-        val isUpper = (controller.shiftState == ShiftState.SHIFTED || controller.shiftState == ShiftState.CAPSLOCKED)
+        // 🌟 修正：controller.state 経由で現在の状態を取得するように変更
+        val currentState = controller.state
+        val isUpper = (currentState.shiftState == ShiftState.SHIFTED || currentState.shiftState == ShiftState.CAPSLOCKED)
 
         // 全キーの印字更新
         for ((buttonId, keyData) in KeyDatabase.keys) {
             val button = keyboardView.findViewById<TextView>(buttonId) ?: continue
-            button.text = controller.currentMode.resolveText(this, themeManager, buttonId, keyData, isUpper)
+            button.text = currentState.currentMode.resolveText(this, themeManager, buttonId, keyData, isUpper)
         }
 
         // シフトボタンの見た目更新
-        keyboardView.findViewById<TextView>(R.id.btn_shift)?.text = when (controller.shiftState) {
+        keyboardView.findViewById<TextView>(R.id.btn_shift)?.text = when (currentState.shiftState) {
             ShiftState.NORMAL -> "⇧"
             ShiftState.SHIFTED -> "⬆"
             ShiftState.CAPSLOCKED -> "⇪"
         }
 
         // モードボタンのテキスト更新
-        keyboardView.findViewById<TextView>(R.id.btn_mode)?.text = controller.currentMode.shortName
+        keyboardView.findViewById<TextView>(R.id.btn_mode)?.text = currentState.currentMode.shortName
     }
 }
