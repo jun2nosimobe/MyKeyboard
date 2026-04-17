@@ -14,6 +14,9 @@ import android.view.inputmethod.InputConnection
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class KeyboardController(
     private val context: Context,
@@ -36,7 +39,7 @@ class KeyboardController(
     private val dbHelper = DictionaryDatabaseHelper(context)
     private val matrixManager = MatrixManager(context)
     private val viterbiConverter = JapaneseConverter(dbHelper, matrixManager)
-    private val candidateManager = CandidateManager(dbHelper, viterbiConverter, composer)
+    private val candidateManager = CandidateManager(dbHelper, viterbiConverter, composer, matrixManager)
 
     // UI系の参照
     private val candidateScroll: HorizontalScrollView? = keyboardView.findViewById(R.id.candidate_scroll)
@@ -90,13 +93,33 @@ class KeyboardController(
             is KeyboardEvent.ShiftToggled -> handleShiftToggled()
         }
     }
-    // 🌟 追加：候補をタップした時専用の処理（ひらがなを上書きして確定する）
+    // 🌟 候補をタップした時専用の処理（ひらがなを上書きして確定する）
     private fun handleCandidateSelected(candidate: String) {
+        val rawStr = state.composingText
+
+        // 🌟 修正：生のローマ字を「綺麗なひらがな」に変換し、末尾の打ちかけの子音を除去する
+        val hiraganaStr = composer.convertRomajiToHiragana(rawStr)
+        val cleanHiragana = hiraganaStr.replace(Regex("[a-zA-Z-]+$"), "")
+
+        // 🌟 ここで学習を実行！
+        if (cleanHiragana.isNotEmpty() && candidate.isNotEmpty()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                dbHelper.learnWord(candidate, cleanHiragana) // 綺麗になった yomi を渡す
+
+                // (確認用：ダンプを残しておく場合はここ)
+                // dbHelper.dumpUserHistory()
+            }
+        }
+
         // 現在の「未確定のひらがな」を、選択された「候補（漢字など）」で上書き確定する
         currentInputConnection?.commitText(candidate, 1)
 
-        // バッファを空にする
-        state = state.copy(composingText = "", isDirectRomajiMode = false)
+        // バッファを空にして、確定単語を記憶（次単語予測用）
+        state = state.copy(
+            composingText = "",
+            isDirectRomajiMode = false,
+            lastConfirmedWord = candidate
+        )
         updateUI()
 
         // 入力後の状態リセット（Shiftの一回解除や、1ショットモードの解除）
@@ -128,6 +151,7 @@ class KeyboardController(
             var newDirectMode = state.isDirectRomajiMode
             var newShiftState = state.shiftState
 
+            // バックスラッシュ( \ ) または Shift入力時は直接(ローマ字)モードへ！
             if ((state.isUpper || textToInput == "\\") && !state.isDirectRomajiMode) {
                 if (state.composingText.isNotEmpty()) forceCommitComposingText(appendSpace = false)
                 newDirectMode = true
@@ -135,6 +159,7 @@ class KeyboardController(
 
             val newComposing = state.composingText + textToInput
 
+            // シフトで1文字打ったら、自動で小文字(NORMAL)に戻す！
             if (state.shiftState == MathKeyboardService.ShiftState.SHIFTED) {
                 newShiftState = MathKeyboardService.ShiftState.NORMAL
                 requestUpdateLabels()
@@ -144,13 +169,14 @@ class KeyboardController(
                 composingText = newComposing,
                 isDirectRomajiMode = newDirectMode,
                 shiftState = newShiftState
+                // 🌟 補足: ここでは lastConfirmedWord はあえて更新・クリアしません。
+                // ユーザーが文字を打ち始めた瞬間、CandidateManager は composingText を見て通常のViterbi変換に切り替わるからです。
             )
             updateUI()
         } else {
             commitDirectText(textToInput)
         }
     }
-
     private fun handleBackspace() {
         if (state.composingText.isNotEmpty()) {
             val newRomaji = composer.computeBackspace(state.composingText, state.isDirectRomajiMode)

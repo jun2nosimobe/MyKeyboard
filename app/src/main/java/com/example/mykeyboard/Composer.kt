@@ -1,20 +1,9 @@
 package com.example.mykeyboard
 
 class Composer {
-
-    // 🌟 HashMapすら使わない、C言語レベルの爆速Trieノード（ASCII 128文字分のアレイ）
-    private class TrieNode {
-        val children = Array<TrieNode?>(128) { null }
-        var output: String? = null
-    }
-
-    private val root = TrieNode()
-    private val CONSONANTS = setOf('k', 's', 't', 'h', 'm', 'r', 'w', 'g', 'z', 'd', 'b', 'p', 'j', 'c', 'f', 'l', 'v')
-
-    init {
-        // 🌟 注意: "nn" to "ん" は削除しました！
-        // Trie木の最長一致探索により、"n" to "ん" だけで「かんな」「さんの」全てが完璧に処理されます。
-        val map = mapOf(
+    companion object {
+        // 🌟 1. マップを Companion Object に配置し、クラス全体で共有する
+        private val ROMAN_MAP = mapOf(
             "ltsu" to "っ", "xtsu" to "っ",
             "kya" to "きゃ", "kyu" to "きゅ", "kyo" to "きょ",
             "sha" to "しゃ", "shi" to "し",  "shu" to "しゅ", "she" to "しぇ", "sho" to "しょ",
@@ -60,14 +49,31 @@ class Composer {
             "xa" to "ぁ", "xi" to "ぃ", "xu" to "ぅ", "xe" to "ぇ", "xo" to "ぉ",
             "a" to "あ", "i" to "い", "u" to "う", "e" to "え", "o" to "お",
             "-" to "ー",
-            "n" to "ん" // <- これだけで nの処理は全て完結します
+            "nn" to "ん",
+            "nna" to "んな", "nni" to "んに", "nnu" to "んぬ", "nne" to "んね", "nno" to "んの",
+            "nnya" to "んにゃ", "nnyu" to "んにゅ", "nnyo" to "んにょ",
+            "n" to "ん"
         )
+
+        // 🌟 2. 逆引き用のマップを起動時に1回だけ構築 (O(1)の爆速アクセスを実現)
+        // 例: REVERSE_MAP["し"] = "shi", REVERSE_MAP["きゃ"] = "kya"
+        private val REVERSE_MAP = ROMAN_MAP.entries.associate { it.value to it.key }
+    }
+    // 🌟 HashMapすら使わない、C言語レベルの爆速Trieノード（ASCII 128文字分のアレイ）
+    private class TrieNode {
+        val children = Array<TrieNode?>(128) { null }
+        var output: String? = null
+    }
+
+    private val root = TrieNode()
+    private val CONSONANTS = setOf('k', 's', 't', 'h', 'm', 'r', 'w', 'g', 'z', 'd', 'b', 'p', 'j', 'c', 'f', 'l', 'v')
+
+    init {
         // 起動時にTrie木を構築
-        for ((key, value) in map) {
+        for ((key, value) in ROMAN_MAP) {
             insertTrie(key, value)
         }
     }
-
     private fun insertTrie(key: String, value: String) {
         var curr = root
         for (c in key) {
@@ -123,8 +129,7 @@ class Composer {
             }
         }
     }
-
-    // バックスペースのロジック（Trie木のおかげで正規表現も短縮可能ですが、一旦挙動の安定している既存のままとします）
+    // 🌟 ゼロアロケーション対応・バックスペース処理
     fun computeBackspace(currentRomaji: String, isDirectMode: Boolean): String {
         if (currentRomaji.isEmpty()) return ""
 
@@ -132,41 +137,36 @@ class Composer {
             return currentRomaji.dropLast(1)
         }
 
-        val currentHira = convertRomajiToHiragana(currentRomaji)
-        if (currentHira.matches(Regex(".*[a-zA-Z]$"))) {
+        val maxKeyLen = minOf(currentRomaji.length, 4)
+        var matchedRomaji = ""
+        var matchedHiragana = ""
+
+        for (len in maxKeyLen downTo 1) {
+            val suffix = currentRomaji.takeLast(len)
+            // 🌟 3. クラス全体で共有された ROMAN_MAP を参照
+            val hiragana = ROMAN_MAP[suffix]
+            if (hiragana != null) {
+                matchedRomaji = suffix
+                matchedHiragana = hiragana
+                break
+            }
+        }
+
+        // 入力途中の子音など
+        if (matchedRomaji.isEmpty()) {
             return currentRomaji.dropLast(1)
         }
 
-        return when {
-            currentRomaji.matches(Regex(".*([ksthmrwgzdbpjcflv])\\1[aiueo]$")) -> currentRomaji.dropLast(3) + "xtsu"
-            currentRomaji.matches(Regex(".*[ksthmyrgzdbp]y[auo]$")) -> currentRomaji.dropLast(2) + "i"
-            currentRomaji.matches(Regex(".*(sh|ch)[auo]$")) -> currentRomaji.dropLast(1) + "i"
-            currentRomaji.matches(Regex(".*j[auo]$")) -> currentRomaji.dropLast(1) + "i"
-            currentRomaji.matches(Regex(".*f[aieo]$")) -> currentRomaji.dropLast(1) + "u"
-            currentRomaji.matches(Regex(".*ts[aieo]$")) -> currentRomaji.dropLast(1) + "u"
-            currentRomaji.matches(Regex(".*(th|dh)[aiueo]$")) -> currentRomaji.dropLast(2) + "e"
-            currentRomaji.matches(Regex(".*w[ie]$")) -> currentRomaji.dropLast(2) + "u"
-            currentRomaji.matches(Regex(".*v[aiueo]$")) -> currentRomaji.dropLast(1) + "u"
-            else -> {
-                var newStr = currentRomaji
-                var dropped = false
-                for (dropCount in 1..4) {
-                    if (currentRomaji.length >= dropCount) {
-                        val testStr = currentRomaji.substring(0, currentRomaji.length - dropCount)
-                        val hira = convertRomajiToHiragana(testStr)
-                        if (!hira.matches(Regex(".*[a-zA-Z].*"))) {
-                            newStr = testStr
-                            dropped = true
-                            break
-                        }
-                    } else if (currentRomaji.length == dropCount) {
-                        newStr = ""
-                        dropped = true
-                        break
-                    }
-                }
-                if (!dropped) currentRomaji.dropLast(1) else newStr
-            }
+        val newHiragana = matchedHiragana.dropLast(1)
+
+        val newRomajiSuffix = if (newHiragana.isEmpty()) {
+            ""
+        } else {
+            // 🌟 4. イテレータの生成を排除し、O(1) で即座に逆引き！
+            REVERSE_MAP[newHiragana] ?: ""
         }
+
+        val baseRomaji = currentRomaji.dropLast(matchedRomaji.length)
+        return baseRomaji + newRomajiSuffix
     }
 }

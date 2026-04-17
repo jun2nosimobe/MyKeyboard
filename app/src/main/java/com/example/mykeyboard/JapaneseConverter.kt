@@ -1,101 +1,128 @@
 package com.example.mykeyboard
 
+import android.util.Log
+import kotlin.math.max
 import kotlin.math.min
 
-// ラティス（探索グラフ）のノード
-data class ViterbiNode(
+// 🌟 修正1：1つのノードではなく「これまでの経路（パス）」全体を記録するクラスに変更
+class ViterbiPath(
     val word: String,
-    val weight: Int,
-    val lid: Int,
+    val cost: Int,
     val rid: Int,
-    val start: Int,
-    val end: Int
-) {
-    var minCost: Int = Int.MAX_VALUE
-    var bestPrev: ViterbiNode? = null
-}
+    val prev: ViterbiPath? // 直前の経路へのポインタ（リンクドリスト形式）
+)
 
 class JapaneseConverter(
     private val db: DictionaryDatabaseHelper,
     private val matrix: MatrixManager
 ) {
-    // 🌟 爆速化のコア：DB検索結果を一時的に保存するキャッシュ
+    // DB検索結果のキャッシュ
     private val queryCache = HashMap<String, List<DictionaryDatabaseHelper.DictEntry>>()
 
-    fun convert(hiragana: String): String {
-        if (hiragana.isEmpty()) return ""
+    // 🌟 ビーム幅（各文字の区切りで保持する上位パスの数）
+    // 大きくすると精度・候補数が増えるが重くなる。スマホなら10〜20が最適。
+    private val BEAM_WIDTH = 10
 
-        // 🌟 変換処理の開始時にキャッシュをクリア（古いメモリを溜め込まない）
+    // 🌟 戻り値を String から List<String> に変更し、複数の変換候補を返せるようにする
+    fun convert(hiragana: String, limit: Int = 5): List<String> {
+        if (hiragana.isEmpty()) return emptyList()
         queryCache.clear()
 
         val len = hiragana.length
-        val nodesAt = Array(len + 1) { mutableListOf<ViterbiNode>() }
 
-        val bos = ViterbiNode("BOS", 0, 0, 0, 0, 0).apply { minCost = 0 }
-        nodesAt[0].add(bos)
+        // dp[i] は「i文字目までを変換した際の、スコアが良い上位 N 個の経路(ViterbiPath)」を保持する
+        val dp = Array(len + 1) { mutableListOf<ViterbiPath>() }
 
-        // 1. ラティス構築
-        for (i in 0 until len) {
-            if (nodesAt[i].isEmpty()) continue
+        // 初期状態 (BOS: 始まり)
+        dp[0].add(ViterbiPath("BOS", 0, 0, null))
 
-            // 処理を軽くするため、最大10文字先までを検索
-            val maxSearchLen = min(len, i + 10)
+        // 1. ビームサーチ（N-Best Viterbi）による探索
+        for (j in 1..len) {
+            val candidatesAtJ = mutableListOf<ViterbiPath>()
 
-            for (j in i + 1..maxSearchLen) {
+            // 処理を軽くするため、直近の最大15文字分までを遡って検索
+            val startI = max(0, j - 15)
+            for (i in startI until j) {
+                if (dp[i].isEmpty()) continue
+
                 val sub = hiragana.substring(i, j)
 
-                // 🌟 劇的な最適化：キャッシュにあればそれを使い、無ければDBにアクセスして保存する
-                val dictMatches = queryCache.getOrPut(sub) { db.getExactMatches(sub) }
+                // ==========================================
+                // 🌟 ここが究極の進化ポイント！
+                // j が len (入力の最後尾) に到達した時だけ、前方一致(予測)を解禁する
+                // ==========================================
+                var dictMatches = if (j == len) {
+                    // キャッシュキーが被らないように "PREFIX_" をつける
+                    queryCache.getOrPut("PREFIX_$sub") {
+                        // 予測用メソッド（後述）を呼ぶ
+                        db.getPrefixMatchesForViterbi(sub)
+                    }
+                } else {
+                    queryCache.getOrPut(sub) {
+                        db.getExactMatches(sub)
+                    }
+                }
+
+                // 🌟 未知語(OOV)救済ロジック
+                if (dictMatches.isEmpty() && sub.length == 1) {
+                    dictMatches = listOf(DictionaryDatabaseHelper.DictEntry(sub, sub, 8000, 0, 0))
+                }
 
                 for (match in dictMatches) {
-                    nodesAt[j].add(ViterbiNode(match.word, match.weight, match.lid, match.rid, i, j))
-                }
-            }
-
-            // 🌟 修正1：foundMatchに関わらず、必ず1文字のフォールバックノードを置く
-            // これにより、どんな入力でもグラフが途切れることなく最短経路を計算できます
-            val fallbackChar = hiragana.substring(i, i + 1)
-            nodesAt[i + 1].add(ViterbiNode(fallbackChar, 8000, 0, 0, i, i + 1))
-        }
-
-        // 2. Viterbi アルゴリズム
-        for (j in 1..len) {
-            for (node in nodesAt[j]) {
-                for (prev in nodesAt[node.start]) {
-                    // 🌟 修正2：オーバーフロー（Int.MAX_VALUE + costがマイナスになるバグ）を防止
-                    if (prev.minCost == Int.MAX_VALUE) continue
-
-                    val connectCost = matrix.getConnectionCost(prev.rid, node.lid)
-                    val totalCost = prev.minCost + connectCost + node.weight
-
-                    if (totalCost < node.minCost) {
-                        node.minCost = totalCost
-                        node.bestPrev = prev
+                    // (以下、既存の Viterbi パス結合ロジックそのまま)
+                    for (prevPath in dp[i]) {
+                        val connectCost = matrix.getConnectionCost(prevPath.rid, match.lid)
+                        val totalCost = prevPath.cost + connectCost + match.weight
+                        candidatesAtJ.add(ViterbiPath(match.word, totalCost, match.rid, prevPath))
                     }
                 }
             }
+
+            // 🌟 ビームサーチの要：枝刈り（Pruning）
+            // 全ての組み合わせを残すとメモリが爆発するので、スコア(cost)が低い上位10個だけを dp[j] に残す
+            dp[j] = candidatesAtJ.sortedBy { it.cost }.take(BEAM_WIDTH).toMutableList()
         }
 
-        val eos = ViterbiNode("EOS", 0, 0, 0, len, len)
-        for (prev in nodesAt[len]) {
-            if (prev.minCost == Int.MAX_VALUE) continue
-            val connectCost = matrix.getConnectionCost(prev.rid, eos.lid)
-            val totalCost = prev.minCost + connectCost
+        // 2. ゴール (EOS: 終わり) 処理
+        val finalPaths = mutableListOf<ViterbiPath>()
+        for (path in dp[len]) {
+            val connectCost = matrix.getConnectionCost(path.rid, 0) // EOSのlidは一般的に0
+            val totalCost = path.cost + connectCost
+            finalPaths.add(ViterbiPath("EOS", totalCost, 0, path))
+        }
 
-            if (totalCost < eos.minCost) {
-                eos.minCost = totalCost
-                eos.bestPrev = prev
+        // 3. バックトラックと結果文字列の組み立て
+        // 最終的にゴールまで到達した経路をスコア順に並べる
+        val topPaths = finalPaths.sortedBy { it.cost }
+
+        // 1位のデバッグログ出力（任意）
+        topPaths.firstOrNull()?.let { best ->
+            Log.d("ViterbiDebug", "Best Path Cost: ${best.cost}")
+        }
+
+        val resultCandidates = mutableListOf<String>()
+
+        for (path in topPaths) {
+            val words = mutableListOf<String>()
+            var curr: ViterbiPath? = path.prev // EOS自体は文字列に含まないためスキップ
+
+            while (curr != null && curr.word != "BOS") {
+                words.add(curr.word)
+                curr = curr.prev
             }
+
+            // 逆から辿っているので反転して結合
+            val candidateString = words.reversed().joinToString("")
+
+            // 異なる経路でも、最終的な文字列が同じになる場合があるため重複を防ぐ
+            if (!resultCandidates.contains(candidateString)) {
+                resultCandidates.add(candidateString)
+            }
+
+            // 指定された数(limit)の候補が集まったら終了
+            if (resultCandidates.size >= limit) break
         }
 
-        // 3. バックトラック
-        val result = mutableListOf<String>()
-        var curr: ViterbiNode? = eos.bestPrev
-        while (curr != null && curr != bos) {
-            result.add(curr.word)
-            curr = curr.bestPrev
-        }
-
-        return result.reversed().joinToString("")
+        return resultCandidates
     }
 }

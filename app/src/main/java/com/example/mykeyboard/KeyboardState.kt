@@ -6,7 +6,8 @@ data class KeyboardState(
     val isDirectRomajiMode: Boolean = false,
     val currentMode: MathKeyboardService.InputMode = MathKeyboardService.InputMode.NORMAL,
     val shiftState: MathKeyboardService.ShiftState = MathKeyboardService.ShiftState.NORMAL,
-    val isOneShotMode: Boolean = false
+    val isOneShotMode: Boolean = false,
+    val lastConfirmedWord: String = ""
 ) {
     // 状態から派生する便利なプロパティ
     val isUpper: Boolean get() = shiftState == MathKeyboardService.ShiftState.SHIFTED || shiftState == MathKeyboardService.ShiftState.CAPSLOCKED

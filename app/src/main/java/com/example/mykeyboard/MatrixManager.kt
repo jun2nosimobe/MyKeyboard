@@ -50,23 +50,44 @@ class MatrixManager(private val context: Context) {
         }
     }
 
-    // 接続コストを取得（実行速度は完全なメモリアクセスと同等）
-    fun getConnectionCost(rid: Int, lid: Int): Int {
-        val buffer = mappedMatrix
 
+    // 接続コストを取得
+    fun getConnectionCost(rid: Int, lid: Int): Int {
+        // 🌟 修正：BOS/EOS (0) の接続コストを確実に 0 にしてViterbiの崩壊を防ぐ！
+        if (rid == 0 || lid == 0) return 0
+
+        val buffer = mappedMatrix
         if (buffer == null || !isLoaded || rid >= matrixSize || lid >= matrixSize || rid < 0 || lid < 0) {
-            return 30000 // 未ロードやエラー時はペナルティコスト
+            return 30000
         }
 
-        // 🌟 1要素がShort（2バイト）なので、インデックスに2を掛けてバイトオフセット（位置）を計算
         val byteOffset = (rid * matrixSize + lid) * 2
 
-        // ファイル容量を超えないか安全のためのチェック
         if (byteOffset < 0 || byteOffset >= buffer.capacity() - 1) {
             return 30000
         }
 
-        // メモリマップドファイルから直接2バイトを読み取り、Intにして返す
         return buffer.getShort(byteOffset).toInt()
+    }
+
+    fun getTopConnectingLids(prevRid: Int, limit: Int = 5): List<Int> {
+        // 32ビットのIntの中に、上位16ビットにコスト、下位16ビットにlidを詰め込んでソートする変態的最適化
+        val packedArray = IntArray(matrixSize - 1)
+
+        for (lid in 1 until matrixSize) {
+            val cost = getConnectionCost(prevRid, lid)
+            // コストを上位にシフトし、lidを下位に結合（ビット演算）
+            packedArray[lid - 1] = (cost shl 16) or (lid and 0xFFFF)
+        }
+
+        // プリミティブ配列のままソート（オブジェクト生成ゼロ）
+        packedArray.sort()
+
+        val result = mutableListOf<Int>()
+        for (i in 0 until minOf(limit, packedArray.size)) {
+            // 下位16ビットを取り出して lid に復元
+            result.add(packedArray[i] and 0xFFFF)
+        }
+        return result
     }
 }
