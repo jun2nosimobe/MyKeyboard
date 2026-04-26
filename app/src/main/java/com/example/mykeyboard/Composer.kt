@@ -50,8 +50,8 @@ class Composer {
             "a" to "あ", "i" to "い", "u" to "う", "e" to "え", "o" to "お",
             "-" to "ー",
             "nn" to "ん",
-            "nna" to "んな", "nni" to "んに", "nnu" to "んぬ", "nne" to "んね", "nno" to "んの",
-            "nnya" to "んにゃ", "nnyu" to "んにゅ", "nnyo" to "んにょ",
+            "nnna" to "んな", "nnni" to "んに", "nnnu" to "んぬ", "nnne" to "んね", "nnno" to "んの",
+            "nnnya" to "んにゃ", "nnnyu" to "んにゅ", "nnnyo" to "んにょ",
             "n" to "ん"
         )
 

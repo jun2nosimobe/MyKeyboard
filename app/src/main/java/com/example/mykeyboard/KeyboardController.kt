@@ -16,7 +16,14 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class KeyboardController(
     private val context: Context,
@@ -56,6 +63,12 @@ class KeyboardController(
         }
     }
 
+    // ==========================================
+    // 🌟 新規：非同期変換用（Coroutines + Flow）のプロパティ
+    // ==========================================
+    private val controllerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val inputFlow = MutableStateFlow(state.composingText)
+
     // 🌟 動的タッチルーター用のプロパティ群
     private val dynamicRouterViews = mutableMapOf<Int, View>()
     private val dynamicRouterHandlers = mutableMapOf<Int, TouchEventHandler>()
@@ -69,6 +82,31 @@ class KeyboardController(
 
     init {
         Thread { matrixManager.loadMatrix() }.start()
+        // ==========================================
+        // 🌟 新規：Flowの監視（Debounceによる変換処理の非同期化）
+        // ==========================================
+        controllerScope.launch {
+            inputFlow
+                .debounce(50L) // 50ms入力が途絶えたら次へ
+                .distinctUntilChanged() // 前と同じ文字列ならスキップ
+                .collectLatest { text ->
+                    // UI(プレビュー部分)は即座に更新しておく
+                    updatePreviewOnly(text)
+
+                    if (text.isEmpty()) {
+                        updateCandidateView(emptyList())
+                        return@collectLatest
+                    }
+
+                    // 🌟 重い変換処理をワーカースレッド(IO)へ逃がす
+                    val candidates = withContext(Dispatchers.IO) {
+                        candidateManager.generateCandidates(state)
+                    }
+
+                    // 🌟 変換が終わったら、メインスレッド(Main)でUIを更新
+                    updateCandidateView(candidates)
+                }
+        }
     }
 
     // 🌟 復活：タップ時の波紋エフェクトを取得
@@ -151,7 +189,6 @@ class KeyboardController(
             var newDirectMode = state.isDirectRomajiMode
             var newShiftState = state.shiftState
 
-            // バックスラッシュ( \ ) または Shift入力時は直接(ローマ字)モードへ！
             if ((state.isUpper || textToInput == "\\") && !state.isDirectRomajiMode) {
                 if (state.composingText.isNotEmpty()) forceCommitComposingText(appendSpace = false)
                 newDirectMode = true
@@ -159,7 +196,6 @@ class KeyboardController(
 
             val newComposing = state.composingText + textToInput
 
-            // シフトで1文字打ったら、自動で小文字(NORMAL)に戻す！
             if (state.shiftState == MathKeyboardService.ShiftState.SHIFTED) {
                 newShiftState = MathKeyboardService.ShiftState.NORMAL
                 requestUpdateLabels()
@@ -169,10 +205,11 @@ class KeyboardController(
                 composingText = newComposing,
                 isDirectRomajiMode = newDirectMode,
                 shiftState = newShiftState
-                // 🌟 補足: ここでは lastConfirmedWord はあえて更新・クリアしません。
-                // ユーザーが文字を打ち始めた瞬間、CandidateManager は composingText を見て通常のViterbi変換に切り替わるからです。
             )
-            updateUI()
+
+            // 🌟 変更：直接 updateUI() を呼ぶのではなく、Flowに流す
+            inputFlow.value = state.composingText
+
         } else {
             commitDirectText(textToInput)
         }
@@ -184,7 +221,8 @@ class KeyboardController(
                 composingText = newRomaji,
                 isDirectRomajiMode = if (newRomaji.isEmpty()) false else state.isDirectRomajiMode
             )
-            updateUI()
+            // 🌟 変更：バックスペース時もFlowに流す
+            inputFlow.value = state.composingText
         } else {
             TextProcessor.handleBackspace(currentInputConnection)
         }
@@ -236,7 +274,52 @@ class KeyboardController(
 
         currentInputConnection?.commitText(textToCommit, 1)
         state = state.copy(composingText = "", isDirectRomajiMode = false)
-        updateUI()
+
+        // 🌟 変更：確定後、Flowに空文字を流してUIをリセット
+        inputFlow.value = ""
+    }
+
+    // ==========================================
+    // 🌟 View の更新処理（プレビュー部分と候補部分を分離）
+    // ==========================================
+
+    // 文字を打った瞬間に、入力中の文字だけを先に画面に出す（軽量）
+    private fun updatePreviewOnly(rawText: String) {
+        if (rawText.isEmpty()) {
+            currentInputConnection?.commitText("", 1)
+        } else {
+            val previewText = if (state.isDirectRomajiMode) rawText else composer.convertRomajiToHiragana(rawText)
+            currentInputConnection?.setComposingText(previewText, 1)
+        }
+    }
+
+    // 裏で計算が終わった変換候補をUIに並べる（重い処理完了後）
+    private fun updateCandidateView(candidates: List<String>) {
+        candidateLayout?.removeAllViews()
+
+        if (candidates.isEmpty()) {
+            candidateScroll?.visibility = View.GONE
+            return
+        }
+
+        candidateScroll?.visibility = View.VISIBLE
+        val rippleResId = getRippleResource()
+
+        for (candidate in candidates) {
+            val tv = TextView(context).apply {
+                text = candidate
+                textSize = 18f
+                setTextColor(Color.BLACK)
+                gravity = Gravity.CENTER
+                setPadding(30, 20, 30, 20)
+                setBackgroundResource(rippleResId)
+                isClickable = true
+                isFocusable = true
+
+                setOnClickListener { dispatch(KeyboardEvent.CandidateSelected(candidate)) }
+            }
+            candidateLayout?.addView(tv)
+        }
     }
 
     private fun commitDirectText(text: String) {

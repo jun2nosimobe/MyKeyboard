@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.max
 
 class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 
@@ -34,7 +35,68 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         }
     }
 
+    // ==========================================
+    // 🌟 修正版：未確定ローマ字から、精緻なGLOBパターンへの完全マッピング
+    // ==========================================
+    private val ROMAJI_GLOB_MAP = mapOf(
+        // 1文字の未確定子音
+        "k" to "[かきくけこ]",
+        "s" to "[さしすせそ]",
+        "t" to "[たちつてとっ]",
+        "n" to "[なにぬねのん]",
+        "h" to "[はひふへほ]",
+        "m" to "[まみむめも]",
+        "y" to "[やゆよ]",
+        "r" to "[らりるれろ]",
+        "w" to "[わをう]",
+        "g" to "[がぎぐげご]",
+        "z" to "[ざじずぜぞ]",
+        "d" to "[だぢづでど]",
+        "b" to "[ばびぶべぼ]",
+        "p" to "[ぱぴぷぺぽ]",
+        "c" to "[ち]", // chi, cha用
+        "f" to "[ふ]",
+        "j" to "[じじゃじゅじょ]",
+        "v" to "[ヴ]",
 
+        // 🌟 2文字の未確定子音（拗音など）
+        "ky" to "き[ゃゅょ]",  // 必ず「き」の次に「ゃ,ゅ,ょ」が来ることを保証！
+        "sy" to "し[ゃゅょ]",
+        "sh" to "し[ゃゅょ]",
+        "ty" to "ち[ゃゅょ]",
+        "ch" to "ち[ゃゅょ]",
+        "ny" to "に[ゃゅょ]",
+        "hy" to "ひ[ゃゅょ]",
+        "my" to "み[ゃゅょ]",
+        "ry" to "り[ゃゅょ]",
+        "gy" to "ぎ[ゃゅょ]",
+        "zy" to "じ[ゃゅょ]",
+        "dy" to "ぢ[ゃゅょ]",
+        "by" to "び[ゃゅょ]",
+        "py" to "ぴ[ゃゅょ]"
+    )
+
+    // 🌟 入力された平仮名と未確定ローマ字から、正確なGLOBパターンを生成
+    private fun getGlobPattern(hiragana: String, trailingRomaji: String): String {
+        if (trailingRomaji.isEmpty()) return "$hiragana*"
+
+        val lowerRomaji = trailingRomaji.lowercase()
+        var globSuffix = ROMAJI_GLOB_MAP[lowerRomaji]
+
+        // 🌟 もし "kk" や "tt" のような連続子音（促音）なら「っ ＋ 次の子音」にする
+        if (globSuffix == null && lowerRomaji.length > 1 && lowerRomaji[0] == lowerRomaji[1]) {
+            val singleConsonant = lowerRomaji.substring(1)
+            val subGlob = ROMAJI_GLOB_MAP[singleConsonant] ?: "*"
+            globSuffix = "っ$subGlob"
+        }
+
+        return if (globSuffix != null) {
+            "$hiragana$globSuffix*"
+        } else {
+            // マップにない変な入力の場合は、安全のため平仮名部分だけで前方一致させる
+            "$hiragana*"
+        }
+    }
     override fun onCreate(db: SQLiteDatabase?) {
         // 🌟 新規：ユーザーの入力履歴を保存するテーブルを作成
         // ON CONFLICT(word) で簡単にカウントアップできるように word を PRIMARY KEY にします
@@ -133,19 +195,28 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
     // 2. 予測変換（学習履歴 ＋ 予測ペナルティ ＋ マトリックス文脈リランキング）
     // ==========================================
     // 🌟 修正1：引数に matrix を追加し、接続コストを計算できるようにする
-    fun getCandidates(hiragana: String, prevRid: Int = 0, matrix: MatrixManager? = null, limit: Int = 40): List<String> {
-        // 返り値は純粋な文字列のリスト
+    fun getCandidates(
+        hiragana: String,
+        trailingRomaji: String = "",
+        prevRid: Int = 0,
+        matrix: MatrixManager? = null,
+        limit: Int = 40
+    ): List<String> {
+
         val finalCandidates = mutableListOf<String>()
         val db = readableDatabase
 
-        // 🌟 Step 1: ユーザーが過去に使った単語（学習履歴）を優先して取得
+        // 🌟 GLOBパターンを生成（高速化の要）
+        val globPattern = getGlobPattern(hiragana, trailingRomaji)
+
+        // Step 1: ユーザーの学習履歴（修正: ? に globPattern を渡す）
         try {
             db.rawQuery("""
                 SELECT word FROM user_history 
                 WHERE yomi GLOB ? 
                 ORDER BY last_used_time DESC, use_count DESC 
                 LIMIT ?
-            """, arrayOf("$hiragana*", limit.toString())).use { cursor ->
+            """, arrayOf(globPattern, limit.toString())).use { cursor ->
                 while (cursor.moveToNext()) {
                     finalCandidates.add(cursor.getString(0))
                 }
@@ -154,16 +225,16 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
             e.printStackTrace()
         }
 
-        // もし学習データだけで上限に達したらそのまま返す
         if (finalCandidates.size >= limit) return finalCandidates
 
-        // 🌟 Step 2: ベース辞書から取得し、ペナルティと「遷移コスト」でリランキング
+        // Step 2: ベース辞書からの予測変換
         val remainingLimit = limit - finalCandidates.size
-        val baseDictCandidates = mutableListOf<Pair<String, Int>>() // Pair(word, 最終コスト)
+        val baseDictCandidates = mutableListOf<Pair<String, Int>>()
 
+        // 🌟 修正: GLOB句に生成したパターンを適用
         db.rawQuery(
             "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE yomi GLOB ? ORDER BY weight ASC LIMIT 100",
-            arrayOf("$hiragana*")
+            arrayOf(globPattern)
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val word = cursor.getString(0)
@@ -171,28 +242,25 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
                 val weight = cursor.getInt(2)
                 val lid = cursor.getInt(3)
 
-                // すでに学習履歴から追加されている単語は、重複して出さないようスキップ
                 if (finalCandidates.contains(word)) continue
 
-                // A. 未入力ペナルティ
-                val missingCharCount = yomi.length - hiragana.length
-                val predictionPenalty = missingCharCount * 100 // ※100くらいが適正
+                // 🌟 修正：未入力ペナルティの計算を調整
+                // trailingRomaji (例: t) がある場合、平仮名1文字分 (例: て) として計算する
+                val expectedMinLen = hiragana.length + (if (trailingRomaji.isNotEmpty()) 1 else 0)
+                val missingCharCount = max(0, yomi.length - expectedMinLen)
+                val predictionPenalty = missingCharCount * 100
 
-                // B. マトリックスを用いた遷移コスト（🌟 ここで実装！）
-                // 直前に確定した単語(prevRid)があり、matrixが渡されていれば計算
                 val connectionCost = if (matrix != null && prevRid != 0) {
                     matrix.getConnectionCost(prevRid, lid)
                 } else {
                     0
                 }
 
-                // 最終コスト（低いほど良い）
                 val finalCost = weight + predictionPenalty + connectionCost
                 baseDictCandidates.add(Pair(word, finalCost))
             }
         }
 
-        // スコア順に並べ替えて、枠が余っている分だけ追加
         baseDictCandidates.sortBy { it.second }
         finalCandidates.addAll(baseDictCandidates.map { it.first }.distinct().take(remainingLimit))
 
