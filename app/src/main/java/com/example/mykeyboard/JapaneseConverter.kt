@@ -4,12 +4,13 @@ import android.util.Log
 import kotlin.math.max
 import kotlin.math.min
 
-// 🌟 修正1：1つのノードではなく「これまでの経路（パス）」全体を記録するクラスに変更
+// 🌟 修正：startIndex を追加し、単語の開始位置を記録
 class ViterbiPath(
     val word: String,
     val cost: Int,
     val rid: Int,
-    val prev: ViterbiPath? // 直前の経路へのポインタ（リンクドリスト形式）
+    val startIndex: Int, // ← NEW! どこから始まった単語か
+    val prev: ViterbiPath?
 )
 
 class JapaneseConverter(
@@ -17,7 +18,7 @@ class JapaneseConverter(
     private val matrix: MatrixManager
 ) {
     private val queryCache = HashMap<String, List<DictionaryDatabaseHelper.DictEntry>>()
-    private val BEAM_WIDTH = 10
+    private val BEAM_WIDTH = 50
 
     // ==========================================
     // 🌟 新規：前回の計算状態（DP表）を保持するキャッシュ
@@ -64,7 +65,7 @@ class JapaneseConverter(
 
         // キャッシュが0（初回または完全に違う文字）の場合はBOSをセット
         if (safeCacheLen == 0) {
-            dp[0].add(ViterbiPath("BOS", 0, 0, null))
+            dp[0].add(ViterbiPath("BOS", 0, 0, 0, null)) // startIndex = 0
         }
 
         // ==========================================
@@ -100,12 +101,51 @@ class JapaneseConverter(
                     for (prevPath in dp[i]) {
                         val connectCost = matrix.getConnectionCost(prevPath.rid, match.lid)
                         val totalCost = prevPath.cost + connectCost + match.weight
-                        candidatesAtJ.add(ViterbiPath(match.word, totalCost, match.rid, prevPath))
+                        // 🌟 ここで i を startIndex として渡す
+                        candidatesAtJ.add(ViterbiPath(match.word, totalCost, match.rid, i, prevPath))
                     }
                 }
             }
-            dp[j] = candidatesAtJ.sortedBy { it.cost }.take(BEAM_WIDTH).toMutableList()
-        }
+            candidatesAtJ.sortBy { it.cost } // 内部でインプレースソート（新リストを作らない）
+            if (candidatesAtJ.size > BEAM_WIDTH) {
+                // BEAM_WIDTH 以降の要素をズバッと削除（新リストを作らない）
+                candidatesAtJ.subList(BEAM_WIDTH, candidatesAtJ.size).clear()
+            }
+            val DIVERSITY_COUNT = 3 // 各切り方(i)ごとに最低限確保する数
+
+            candidatesAtJ.sortBy { it.cost } // まず全体をコスト順にソート
+
+            // インプレースで処理してメモリ割り当て(GC)を防ぐ
+            val nextDp = ArrayList<ViterbiPath>(BEAM_WIDTH)
+            // j - i は最大15なので、長さ16の軽量配列で各開始位置の確保数をカウント
+            val countsByOffset = IntArray(16)
+            val added = BooleanArray(candidatesAtJ.size)
+
+            // 🌟 パス1: 多様性の確保（各開始位置 i ごとにトップ2個を強制確保）
+            for (idx in candidatesAtJ.indices) {
+                val cand = candidatesAtJ[idx]
+                val offset = j - cand.startIndex // どれくらい前から始まったか(1〜15)
+
+                if (offset in 1..15 && countsByOffset[offset] < DIVERSITY_COUNT) {
+                    nextDp.add(cand)
+                    countsByOffset[offset]++
+                    added[idx] = true
+                }
+            }
+
+            // 🌟 パス2: 残りの枠を、純粋に全体でコストが低い順に埋めていく
+            for (idx in candidatesAtJ.indices) {
+                if (nextDp.size >= BEAM_WIDTH) break
+                if (!added[idx]) {
+                    nextDp.add(candidatesAtJ[idx])
+                    added[idx] = true
+                }
+            }
+
+            // 最後に再度コスト順に整列して確定
+            nextDp.sortBy { it.cost }
+            dp[j] = nextDp
+        } // <- j のループ終わり
 
         // ==========================================
         // 🌟 4. 次回の入力のために状態を保存
@@ -113,19 +153,19 @@ class JapaneseConverter(
         lastInput = hiragana
         cachedDp = dp
 
-        // ==========================================
-        // 5. ゴール (EOS) 処理とバックトラック
-        // ==========================================
-        // （EOS処理と文字列組み立ては既存のコードそのまま）
+        // 5. ゴール (EOS) 処理
         val finalPaths = mutableListOf<ViterbiPath>()
         for (path in dp[len]) {
             val connectCost = matrix.getConnectionCost(path.rid, 0)
             val totalCost = path.cost + connectCost
-            finalPaths.add(ViterbiPath("EOS", totalCost, 0, path))
+            // EOSにも startIndex (len) を渡す
+            finalPaths.add(ViterbiPath("EOS", totalCost, 0, len, path))
         }
 
         val topPaths = finalPaths.sortedBy { it.cost }
-        val resultCandidates = mutableListOf<String>()
+
+        // 🌟 重複チェックによる $O(N)$ の遅延を防ぐため LinkedHashSet に変更
+        val resultCandidates = java.util.LinkedHashSet<String>()
 
         for (path in topPaths) {
             val words = mutableListOf<String>()
@@ -137,12 +177,12 @@ class JapaneseConverter(
             }
 
             val candidateString = words.reversed().joinToString("")
-            if (!resultCandidates.contains(candidateString)) {
-                resultCandidates.add(candidateString)
-            }
+            // contains判定不要、そのままaddするだけで順序を保って重複排除される
+            resultCandidates.add(candidateString)
+
             if (resultCandidates.size >= limit) break
         }
 
-        return resultCandidates
+        return resultCandidates.toList()
     }
 }

@@ -7,7 +7,12 @@ data class KeyboardState(
     val currentMode: MathKeyboardService.InputMode = MathKeyboardService.InputMode.NORMAL,
     val shiftState: MathKeyboardService.ShiftState = MathKeyboardService.ShiftState.NORMAL,
     val isOneShotMode: Boolean = false,
-    val lastConfirmedWord: String = ""
+    val lastConfirmedWord: String = "",
+    // ==========================================
+    // 🌟 NEW: 動的ヒットボックス用のパラメータ
+    // ==========================================
+    val lastKeyPressTime: Long = 0L,
+    val predictedNextKeys: Map<String, Float> = emptyMap()
 ) {
     // 状態から派生する便利なプロパティ
     val isUpper: Boolean get() = shiftState == MathKeyboardService.ShiftState.SHIFTED || shiftState == MathKeyboardService.ShiftState.CAPSLOCKED

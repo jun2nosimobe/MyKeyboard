@@ -6,11 +6,13 @@ class CandidateManager(
     private val composer: Composer,
     private val matrix: MatrixManager
 ) {
-    fun generateCandidates(state: KeyboardState): List<String> {
+    // 🌟 修正: 戻り値を List<Pair<String, String>> に変更
+    fun generateCandidates(state: KeyboardState): List<Pair<String, String>> {
 
-        val finalCandidates = mutableListOf<String>()
+        val finalCandidates = mutableListOf<Pair<String, String>>()
         val rawStr = state.composingText
 
+        // 次単語予測モード
         if (rawStr.isEmpty()) {
             val lastWord = state.lastConfirmedWord
             if (!lastWord.isNullOrEmpty()) {
@@ -24,12 +26,13 @@ class CandidateManager(
             return finalCandidates
         }
 
+        // Direct Romaji Mode
         if (state.isDirectRomajiMode) {
-            finalCandidates.add(rawStr)
+            finalCandidates.add(Pair(rawStr, rawStr))
             if (rawStr.startsWith("\\") && rawStr.length > 1) {
                 val dbCandidates = dbHelper.getCandidates(rawStr.substring(1), limit = 10)
-                for (word in dbCandidates) {
-                    if (!finalCandidates.contains(word)) finalCandidates.add(word)
+                for (cand in dbCandidates) {
+                    if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(cand)
                 }
             }
             return finalCandidates
@@ -38,72 +41,64 @@ class CandidateManager(
         val hiraganaStr = composer.convertRomajiToHiragana(rawStr)
         val trailingRomajiMatch = Regex("[a-zA-Z-]+$").find(hiraganaStr)
         val trailingRomaji = trailingRomajiMatch?.value ?: ""
-        val cleanHiragana = if (trailingRomaji.isNotEmpty()) hiraganaStr.dropLast(trailingRomaji.length) else hiraganaStr
+        val cleanHiragana =
+            if (trailingRomaji.isNotEmpty()) hiraganaStr.dropLast(trailingRomaji.length) else hiraganaStr
 
-        // 💡 Viterbiにはあえて trailingRomaji を渡しません。
-        // これにより、Viterbiは純粋に「微分法」を返し、それに「t」がくっついて「微分法t」となります。
-        val viterbiResults = if (cleanHiragana.isNotEmpty()) viterbiConverter.convert(cleanHiragana, limit = 5) else emptyList()
-        val viterbiCandidates = viterbiResults.map { it + trailingRomaji }
+        // 🌟 Viterbiの結果を Pair にする (Viterbiの読みは、渡した cleanHiragana そのもの！)
+        val viterbiResults = if (cleanHiragana.isNotEmpty()) viterbiConverter.convert(
+            cleanHiragana,
+            limit = 10
+        ) else emptyList()
+        val viterbiCandidates = viterbiResults.map {
+            Pair(it + trailingRomaji, cleanHiragana + trailingRomaji)
+        }
 
         val prevRid = state.lastConfirmedWord.takeIf { it.isNotEmpty() }?.let {
             dbHelper.getRidForWord(it)
         } ?: 0
 
-        // 取得した prevRid と matrix を渡して文脈リランキングを発動させる
-        // ==========================================
-        // 🌟 修正箇所1：trailingRomaji を渡して「先読みGLOB予測」を発動させる！
-        // ==========================================
         val dbCandidates = if (cleanHiragana.isNotEmpty() || trailingRomaji.isNotEmpty()) {
             dbHelper.getCandidates(
                 hiragana = cleanHiragana,
-                trailingRomaji = trailingRomaji, // ← 🌟ここが抜けていました！
+                trailingRomaji = trailingRomaji,
                 prevRid = prevRid,
                 matrix = matrix,
                 limit = 10
             )
-        } else {
-            emptyList()
-        }
+        } else emptyList()
 
-        // ==========================================
-        // 🌟 修正箇所2：打ちかけ状態（tなど）なら「予測」を優先し、そうでないなら「Viterbi」を優先！
-        // ==========================================
+        // 統合処理 (重複は first で判定)
         if (trailingRomaji.isNotEmpty()) {
-            // 【パターンA: 打ちかけ（例：bibunhout）】
-            // ユーザーは「微分方程式」などを探しているので、予測候補をトップに持ってくる
-            for (cand in dbCandidates) {
-                if (!finalCandidates.contains(cand)) {
-                    finalCandidates.add(cand)
-                }
-            }
-            // 「微分法t」などのローマ字混じりViterbi候補は、予測の下に降格させる
-            for (cand in viterbiCandidates) {
-                if (!finalCandidates.contains(cand)) {
-                    finalCandidates.add(cand)
-                }
-            }
+            for (cand in dbCandidates) if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(
+                cand
+            )
+            for (cand in viterbiCandidates) if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(
+                cand
+            )
         } else {
-            // 【パターンB: 打ち終わり（例：bibunhou）】
-            // ユーザーは「微分法」という確定文字を探しているので、Viterbiをトップに持ってくる
-            for (cand in viterbiCandidates) {
-                if (!finalCandidates.contains(cand)) {
-                    finalCandidates.add(cand)
-                }
-            }
-            for (cand in dbCandidates) {
-                if (!finalCandidates.contains(cand)) {
-                    finalCandidates.add(cand)
-                }
-            }
+            for (cand in viterbiCandidates) if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(
+                cand
+            )
+            for (cand in dbCandidates) if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(
+                cand
+            )
         }
 
-        // 最後に無変換の平仮名、カタカナ、ローマ字をフォールバックとして追加
-        if (!finalCandidates.contains(hiraganaStr)) finalCandidates.add(hiraganaStr)
+        if (finalCandidates.none { it.first == hiraganaStr }) finalCandidates.add(
+            Pair(
+                hiraganaStr,
+                hiraganaStr
+            )
+        )
 
-        val katakanaStr = hiraganaStr.map { if (it in 'ぁ'..'ん') it + 0x60 else it }.joinToString("")
-        if (katakanaStr != hiraganaStr && !finalCandidates.contains(katakanaStr)) finalCandidates.add(katakanaStr)
-
-        if (rawStr != hiraganaStr && !finalCandidates.contains(rawStr)) finalCandidates.add(rawStr)
+        val katakanaStr =
+            hiraganaStr.map { if (it in 'ぁ'..'ん') it + 0x60 else it }.joinToString("")
+        if (katakanaStr != hiraganaStr && finalCandidates.none { it.first == katakanaStr }) finalCandidates.add(
+            Pair(katakanaStr, katakanaStr)
+        )
+        if (rawStr != hiraganaStr && finalCandidates.none { it.first == rawStr }) finalCandidates.add(
+            Pair(rawStr, rawStr)
+        )
 
         return finalCandidates
     }

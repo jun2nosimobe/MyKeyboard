@@ -76,26 +76,28 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         "py" to "ぴ[ゃゅょ]"
     )
 
-    // 🌟 入力された平仮名と未確定ローマ字から、正確なGLOBパターンを生成
-    private fun getGlobPattern(hiragana: String, trailingRomaji: String): String {
-        if (trailingRomaji.isEmpty()) return "$hiragana*"
+    private fun getGlobPrefixes(hiragana: String, trailingRomaji: String): List<String> {
+        if (trailingRomaji.isEmpty()) return listOf("$hiragana*")
 
         val lowerRomaji = trailingRomaji.lowercase()
-        var globSuffix = ROMAJI_GLOB_MAP[lowerRomaji]
+        var globStr = ROMAJI_GLOB_MAP[lowerRomaji]
 
-        // 🌟 もし "kk" や "tt" のような連続子音（促音）なら「っ ＋ 次の子音」にする
-        if (globSuffix == null && lowerRomaji.length > 1 && lowerRomaji[0] == lowerRomaji[1]) {
-            val singleConsonant = lowerRomaji.substring(1)
-            val subGlob = ROMAJI_GLOB_MAP[singleConsonant] ?: "*"
-            globSuffix = "っ$subGlob"
+        // 促音（ttなど）の処理
+        if (globStr == null && lowerRomaji.length > 1 && lowerRomaji[0] == lowerRomaji[1]) {
+            val subGlob = ROMAJI_GLOB_MAP[lowerRomaji.substring(1)] ?: ""
+            if (subGlob.isNotEmpty()) globStr = "っ$subGlob"
         }
 
-        return if (globSuffix != null) {
-            "$hiragana$globSuffix*"
-        } else {
-            // マップにない変な入力の場合は、安全のため平仮名部分だけで前方一致させる
-            "$hiragana*"
+        if (globStr != null && globStr.contains("[")) {
+            // 例: "き[ゃゅょ]" -> prefix="き", chars="ゃゅょ"
+            val prefix = globStr.substringBefore("[")
+            val chars = globStr.substringAfter("[").substringBefore("]")
+
+            // 🌟 ここで「き* OR きゅ* OR きょ*」のように確実にインデックスが効くリストに展開！
+            return chars.map { "$hiragana$prefix$it*" }
         }
+
+        return listOf("$hiragana*")
     }
     override fun onCreate(db: SQLiteDatabase?) {
         // 🌟 新規：ユーザーの入力履歴を保存するテーブルを作成
@@ -109,20 +111,11 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
             )
         """)
     }
-    // ==========================================
-    // 🌟 修正：既存のDBを読み込んだ際にも、確実にテーブルを作る
-    // ==========================================
-    override fun onOpen(db: SQLiteDatabase) {
+    override fun onOpen(db: SQLiteDatabase?) {
         super.onOpen(db)
-        // IF NOT EXISTS がついているので、既に存在する場合は一瞬でスキップされ負荷はかかりません
-        db.execSQL("""
-            CREATE TABLE IF NOT EXISTS user_history (
-                word TEXT PRIMARY KEY,
-                yomi TEXT,
-                use_count INTEGER DEFAULT 1,
-                last_used_time INTEGER
-            )
-        """)
+        // 🌟 DBを開くたびに確認し、無ければインデックスを作成する（超高速化）
+        db?.execSQL("CREATE INDEX IF NOT EXISTS idx_dictionary_yomi ON dictionary(yomi)")
+        db?.execSQL("CREATE INDEX IF NOT EXISTS idx_history_yomi ON user_history(yomi)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase?, oldVersion: Int, newVersion: Int) {
@@ -195,30 +188,35 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
     // 2. 予測変換（学習履歴 ＋ 予測ペナルティ ＋ マトリックス文脈リランキング）
     // ==========================================
     // 🌟 修正1：引数に matrix を追加し、接続コストを計算できるようにする
+    // ==========================================
+    // 🌟 修正: 戻り値を List<Pair<String, String>> (単語と読みのペア) に変更
+    // ==========================================
     fun getCandidates(
         hiragana: String,
         trailingRomaji: String = "",
         prevRid: Int = 0,
         matrix: MatrixManager? = null,
         limit: Int = 40
-    ): List<String> {
+    ): List<Pair<String, String>> {
 
-        val finalCandidates = mutableListOf<String>()
+        val finalCandidates = mutableListOf<Pair<String, String>>()
         val db = readableDatabase
 
-        // 🌟 GLOBパターンを生成（高速化の要）
-        val globPattern = getGlobPattern(hiragana, trailingRomaji)
+        // 🌟 NEW: 展開されたパターンのリストと、WHERE句を生成
+        val prefixes = getGlobPrefixes(hiragana, trailingRomaji)
+        val whereClause = prefixes.joinToString(" OR ") { "yomi GLOB ?" }
 
-        // Step 1: ユーザーの学習履歴（修正: ? に globPattern を渡す）
+        // Step 1: ユーザーの学習履歴
         try {
+            val historyArgs = (prefixes + limit.toString()).toTypedArray()
             db.rawQuery("""
-                SELECT word FROM user_history 
-                WHERE yomi GLOB ? 
+                SELECT word, yomi FROM user_history 
+                WHERE $whereClause 
                 ORDER BY last_used_time DESC, use_count DESC 
                 LIMIT ?
-            """, arrayOf(globPattern, limit.toString())).use { cursor ->
+            """, historyArgs).use { cursor ->
                 while (cursor.moveToNext()) {
-                    finalCandidates.add(cursor.getString(0))
+                    finalCandidates.add(Pair(cursor.getString(0), cursor.getString(1)))
                 }
             }
         } catch (e: Exception) {
@@ -227,14 +225,14 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
 
         if (finalCandidates.size >= limit) return finalCandidates
 
-        // Step 2: ベース辞書からの予測変換
         val remainingLimit = limit - finalCandidates.size
-        val baseDictCandidates = mutableListOf<Pair<String, Int>>()
+        val baseDictCandidates = mutableListOf<Pair<Pair<String, String>, Int>>()
 
-        // 🌟 修正: GLOB句に生成したパターンを適用
+        // Step 2: ベース辞書
+        val dictArgs = prefixes.toTypedArray()
         db.rawQuery(
-            "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE yomi GLOB ? ORDER BY weight ASC LIMIT 100",
-            arrayOf(globPattern)
+            "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE $whereClause ORDER BY weight ASC LIMIT 100",
+            dictArgs
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val word = cursor.getString(0)
@@ -242,12 +240,11 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
                 val weight = cursor.getInt(2)
                 val lid = cursor.getInt(3)
 
-                if (finalCandidates.contains(word)) continue
+                // 既に履歴にあるかチェック
+                if (finalCandidates.any { it.first == word }) continue
 
-                // 🌟 修正：未入力ペナルティの計算を調整
-                // trailingRomaji (例: t) がある場合、平仮名1文字分 (例: て) として計算する
                 val expectedMinLen = hiragana.length + (if (trailingRomaji.isNotEmpty()) 1 else 0)
-                val missingCharCount = max(0, yomi.length - expectedMinLen)
+                val missingCharCount = kotlin.math.max(0, yomi.length - expectedMinLen)
                 val predictionPenalty = missingCharCount * 100
 
                 val connectionCost = if (matrix != null && prevRid != 0) {
@@ -257,17 +254,39 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
                 }
 
                 val finalCost = weight + predictionPenalty + connectionCost
-                baseDictCandidates.add(Pair(word, finalCost))
+                baseDictCandidates.add(Pair(Pair(word, yomi), finalCost))
             }
         }
 
         baseDictCandidates.sortBy { it.second }
-        finalCandidates.addAll(baseDictCandidates.map { it.first }.distinct().take(remainingLimit))
+        // コスト順にソートして、重複を省きながら追加
+        val sortedNewCands = baseDictCandidates.map { it.first }.distinctBy { it.first }.take(remainingLimit)
+        finalCandidates.addAll(sortedNewCands)
 
         return finalCandidates
     }
 
+    // 🌟 ついでに、getPredictionsByLids も yomi を返すように修正
+    fun getPredictionsByLids(lids: List<Int>, limit: Int = 15): List<Pair<String, String>> {
+        if (lids.isEmpty()) return emptyList()
+        val list = mutableListOf<Pair<String, String>>()
+        val db = readableDatabase
+        val placeholders = lids.joinToString(",") { "?" }
+        val args = lids.map { it.toString() }.toTypedArray()
 
+        // SELECT に yomi を追加
+        db.rawQuery(
+            "SELECT word, yomi FROM dictionary WHERE lid IN ($placeholders) ORDER BY weight ASC LIMIT $limit",
+            args
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val w = cursor.getString(0)
+                val y = cursor.getString(1)
+                if (list.none { it.first == w }) list.add(Pair(w, y))
+            }
+        }
+        return list
+    }
     // ==========================================
     // 3. 次単語予測用のヘルパー関数
     // ==========================================
@@ -285,27 +304,6 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         return null
     }
 
-    // 繋がりやすい lid のリストを受け取り、それに合致する高頻度な単語を返す
-    fun getPredictionsByLids(lids: List<Int>, limit: Int = 15): List<String> {
-        if (lids.isEmpty()) return emptyList()
-
-        // "?, ?, ?" のようなプレースホルダーを作る
-        val placeholders = lids.joinToString(",") { "?" }
-        val args = lids.map { it.toString() }.toTypedArray()
-        val list = mutableListOf<String>()
-
-        // 指定された lid の中から、単独コスト(weight)が低い順に取得
-        readableDatabase.rawQuery(
-            "SELECT word FROM dictionary WHERE lid IN ($placeholders) ORDER BY weight ASC LIMIT ?",
-            arrayOf(*args, limit.toString())
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val w = cursor.getString(0)
-                if (!list.contains(w)) list.add(w)
-            }
-        }
-        return list
-    }
     // ==========================================
     // 🌟 Viterbiエンジン専用・前方一致予測検索
     // ==========================================
