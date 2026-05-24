@@ -193,7 +193,7 @@ class KeyboardController(
             newShift = MathKeyboardService.ShiftState.NORMAL
             needsUpdate = true
         }
-        if (state.isOneShotMode) {
+        if (state.isOneShotMode && state.currentMode != MathKeyboardService.InputMode.JAPANESE) {
             newMode = MathKeyboardService.InputMode.NORMAL
             newOneShot = false
             needsUpdate = true
@@ -226,7 +226,7 @@ class KeyboardController(
             newShift = MathKeyboardService.ShiftState.NORMAL
             needsUpdate = true
         }
-        if (state.isOneShotMode) {
+        if (state.isOneShotMode && state.currentMode != MathKeyboardService.InputMode.JAPANESE) {
             newMode = MathKeyboardService.InputMode.NORMAL
             newOneShot = false
             needsUpdate = true
