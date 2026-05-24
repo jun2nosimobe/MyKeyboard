@@ -27,6 +27,6 @@ sealed class KeyboardEvent {
     object EnterTapped : KeyboardEvent()
     object BackspaceTapped : KeyboardEvent()
     data class CandidateSelected(val text: String) : KeyboardEvent()
-    data class ModeChanged(val mode: MathKeyboardService.InputMode) : KeyboardEvent()
+    data class ModeChanged(val mode: MathKeyboardService.InputMode, val isOneShot: Boolean = true) : KeyboardEvent()
     object ShiftToggled : KeyboardEvent()
 }

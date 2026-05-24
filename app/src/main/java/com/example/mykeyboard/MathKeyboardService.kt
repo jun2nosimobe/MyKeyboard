@@ -21,8 +21,8 @@ class MathKeyboardService : InputMethodService() {
         GREEK("GRK", "Greek", { TextProcessor.toGreek(it) }),
         MATHSCRIPT("SCR", "Script", { TextProcessor.toMathscript(it) }),
         MATHSYMBOL("SYM", "Symbol", { TextProcessor.toMathsymbol(it) }),
-        SUPERSCRIPT("SUP", "Super (^高)", { TextProcessor.toSuperscript(it) }),
-        SUBSCRIPT("SUB", "Sub (_低)", { TextProcessor.toSubscript(it) }),
+        SUPERSCRIPT("SUP", "Super", { TextProcessor.toSuperscript(it) }),
+        SUBSCRIPT("SUB", "Sub", { TextProcessor.toSubscript(it) }),
         ITALIC("ITA", "Italic", { TextProcessor.toItalic(it) }),
         FULLWIDTH("FUL", "全角", { TextProcessor.toFullWidth(it) }),
 

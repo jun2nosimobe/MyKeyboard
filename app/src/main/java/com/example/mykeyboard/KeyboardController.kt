@@ -76,7 +76,7 @@ class KeyboardController(
         // 🌟 変換計算の非同期パイプライン (Debounce 50ms)
         controllerScope.launch {
             stateFlow
-                .debounce(50L)
+                .debounce(100L)
                 .distinctUntilChangedBy { it.composingText }
                 .collectLatest { currentState ->
                     if (currentState.composingText.isEmpty() && currentState.lastConfirmedWord.isEmpty()) {
@@ -109,7 +109,7 @@ class KeyboardController(
             is KeyboardEvent.EnterTapped -> handleEnterTapped()
             is KeyboardEvent.BackspaceTapped -> handleBackspace()
             is KeyboardEvent.CandidateSelected -> handleCandidateSelected(event.text)
-            is KeyboardEvent.ModeChanged -> handleModeChanged(event.mode)
+            is KeyboardEvent.ModeChanged -> handleModeChanged(event.mode, event.isOneShot)
             is KeyboardEvent.ShiftToggled -> handleShiftToggled()
         }
     }
@@ -122,12 +122,19 @@ class KeyboardController(
         if (canCompose) {
             var newDirectMode = state.isDirectRomajiMode
             var newShiftState = state.shiftState
+            var needsLabelUpdate = false // 🌟 追加: ラベル更新が必要かどうかのフラグ
+
             if ((state.isUpper || textToInput == "\\") && !state.isDirectRomajiMode) {
                 if (state.composingText.isNotEmpty()) forceCommitComposingText(appendSpace = false)
                 newDirectMode = true
             }
             val newComposing = state.composingText + textToInput
-            if (state.shiftState == MathKeyboardService.ShiftState.SHIFTED) newShiftState = MathKeyboardService.ShiftState.NORMAL
+
+            // 🌟 修正: シフト状態が解除されるならフラグを立てる
+            if (state.shiftState == MathKeyboardService.ShiftState.SHIFTED) {
+                newShiftState = MathKeyboardService.ShiftState.NORMAL
+                needsLabelUpdate = true
+            }
 
             state = state.copy(
                 composingText = newComposing,
@@ -136,7 +143,9 @@ class KeyboardController(
                 lastKeyPressTime = System.currentTimeMillis()
             )
             updateUI()
-            if (newShiftState != state.shiftState) requestUpdateLabels()
+
+            // 🌟 修正: フラグを見てUIを更新する
+            if (needsLabelUpdate) requestUpdateLabels()
         } else {
             commitDirectText(textToInput)
         }
@@ -235,11 +244,11 @@ class KeyboardController(
         }
     }
 
-    private fun handleModeChanged(mode: MathKeyboardService.InputMode) {
+    private fun handleModeChanged(mode: MathKeyboardService.InputMode, isOneShot: Boolean) {
         forceCommitComposingText(appendSpace = false)
         state = state.copy(
             currentMode = mode,
-            isOneShotMode = (mode != MathKeyboardService.InputMode.NORMAL && mode != MathKeyboardService.InputMode.JAPANESE)
+            isOneShotMode = isOneShot
         )
         requestUpdateLabels()
     }
@@ -333,6 +342,7 @@ class KeyboardController(
                             R.id.btn_v -> MathKeyboardService.InputMode.TEXTBF
                             R.id.btn_s -> MathKeyboardService.InputMode.MATHSCRIPT
                             R.id.btn_f -> MathKeyboardService.InputMode.FRAKTUR
+                            R.id.btn_m -> MathKeyboardService.InputMode.MATHSYMBOL
                             R.id.btn_n -> MathKeyboardService.InputMode.NORMAL
                             R.id.btn_caret -> MathKeyboardService.InputMode.SUPERSCRIPT
                             R.id.btn_underscore -> MathKeyboardService.InputMode.SUBSCRIPT
@@ -341,7 +351,13 @@ class KeyboardController(
                             R.id.btn_j -> MathKeyboardService.InputMode.JAPANESE
                             else -> null
                         }
-                        if (flickMode != null) dispatch(KeyboardEvent.ModeChanged(flickMode))
+                        if (flickMode != null) {
+                            // 🌟 判定：現在のモードがフリック対象と同じ、かつまだ1回限りの状態なら「2回目の連続フリック」とみなす
+                            val isTwoTimesFlick = (state.currentMode == flickMode && state.isOneShotMode)
+
+                            // 2回目なら固定(isOneShot=false)、1回目ならワンショット(isOneShot=true)で送る
+                            dispatch(KeyboardEvent.ModeChanged(flickMode, isOneShot = !isTwoTimesFlick))
+                        }
                     }
                 },
                 getRippleResource = { rippleResId }
@@ -388,14 +404,19 @@ class KeyboardController(
                     for ((id, center) in keyCentersRel) {
                         val dx = x - center.first
                         val dy = y - center.second
-                        val dist = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                        val distSq = dx * dx + dy * dy
 
                         val label = (dynamicRouterViews[id] as? TextView)?.text?.toString()?.lowercase() ?: ""
                         var contextWeight = defaultKeyWeights[label] ?: 1.0f
 
                         // 🌟 日本語モードの時だけ、強力なローマ字アシスト（物理ルール）を発動！
                         if (state.currentMode == MathKeyboardService.InputMode.JAPANESE) {
-                            if (state.lastChar != null) {
+
+                            // 🌟 NEW: 数字キーへの誤爆を防ぐため、数字のウェイトを極端に下げる！
+                            if (label.length == 1 && label[0].isDigit()) {
+                                contextWeight *= 0.5f // 2分の1の評価にする（必要に応じて 0.2f などに調整してください）
+                            }
+                            else if (state.lastChar != null) {
                                 val last = state.lastChar.toString()
                                 if (label == last && label in CONSONANTS && label != "n") {
                                     contextWeight *= 1.5f // 促音
@@ -415,7 +436,7 @@ class KeyboardController(
 
                         // 時間減衰の適用
                         val finalWeight = 1.0f + (contextWeight - 1.0f) * decayFactor
-                        val score = dist / finalWeight
+                        val score = distSq / (finalWeight * finalWeight)
 
                         if (score < minScore) {
                             minScore = score
@@ -473,10 +494,15 @@ class KeyboardController(
 
         val btnMode = keyboardView.findViewById<TextView>(R.id.btn_mode)
         btnMode?.setOnTouchListener(TouchEventHandler(
-            onSingleTap = { dispatch(KeyboardEvent.ModeChanged(if (state.currentMode == MathKeyboardService.InputMode.NORMAL) MathKeyboardService.InputMode.MATHSYMBOL else MathKeyboardService.InputMode.NORMAL)) },
+            onSingleTap = {
+                val nextMode = if (state.currentMode == MathKeyboardService.InputMode.NORMAL) MathKeyboardService.InputMode.MATHSYMBOL else MathKeyboardService.InputMode.NORMAL
+                val defaultOneShot = (nextMode != MathKeyboardService.InputMode.NORMAL && nextMode != MathKeyboardService.InputMode.JAPANESE)
+                dispatch(KeyboardEvent.ModeChanged(nextMode, isOneShot = defaultOneShot))
+            },
             onLongPressSetup = {
                 PopupManager.createModeKeyPopup(context, btnMode, rippleResId,
-                    onModeSelected = { m -> dispatch(KeyboardEvent.ModeChanged(m)) },
+                    // 🌟 修正：長押し選択画面からの切り替え時は isOneShot = false にして固定する
+                    onModeSelected = { m -> dispatch(KeyboardEvent.ModeChanged(m, isOneShot = false)) },
                     onSymbolSelected = { sym -> dispatch(KeyboardEvent.DirectTextCommitted(sym)) },
                     onBackspaceSelected = { dispatch(KeyboardEvent.BackspaceTapped) },
                     onSpaceSelected = { dispatch(KeyboardEvent.SpaceTapped) },
