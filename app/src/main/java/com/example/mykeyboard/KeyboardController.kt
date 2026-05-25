@@ -500,23 +500,27 @@ class KeyboardController(
                 dispatch(KeyboardEvent.ModeChanged(nextMode, isOneShot = defaultOneShot))
             },
             onLongPressSetup = {
-                PopupManager.createModeKeyPopup(context, btnMode, rippleResId,
-                    // 🌟 修正：長押し選択画面からの切り替え時は isOneShot = false にして固定する
+                PopupManager.createModeKeyPopup(
+                    context = context,
+                    anchorView = btnMode,
+                    rippleResId = rippleResId,
                     onModeSelected = { m -> dispatch(KeyboardEvent.ModeChanged(m, isOneShot = false)) },
                     onSymbolSelected = { sym -> dispatch(KeyboardEvent.DirectTextCommitted(sym)) },
                     onBackspaceSelected = { dispatch(KeyboardEvent.BackspaceTapped) },
                     onSpaceSelected = { dispatch(KeyboardEvent.SpaceTapped) },
-                    onSettingsColorToggle = { themeManager.toggleKeyTextColor(); themeManager.updateAllTextColors(keyboardView) },
-                    onSettingsAlphaChanged = { p -> themeManager.setBgAlpha(p / 100f, keyboardView) },
-                    onSettingsBrightnessChanged = { p -> themeManager.setBgColorPacked(Color.rgb(p, p, p), keyboardView) },
-                    onSettingsDetailClicked = {
-                        val intent = Intent(context, SettingsActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
-                        try { context.startActivity(intent) } catch (e: Exception) {}
-                    },
-                    currentKeyTextColor = themeManager.keyTextColor, currentBgAlpha = themeManager.bgAlpha, currentBgColorPacked = themeManager.bgColorPacked
+                    onSettingsClicked = {
+                        // 🌟 MainActivity (統合設定パネル) へ直接飛ぶように修正
+                        val intent = Intent(context, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        }
+                        try { context.startActivity(intent) } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                 )
             },
-            onFlick = {}, getRippleResource = { rippleResId }
+            onFlick = {},
+            getRippleResource = { rippleResId }
         ))
     }
 }

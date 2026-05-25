@@ -12,20 +12,20 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import kotlin.math.max
 import kotlin.math.min
 
 object PopupManager {
 
-    // 🌟 システムサービスの呼び出しをキャッシュ化
     private var cachedScreenWidth: Int = -1
     private var cachedModePopup: Pair<PopupWindow, List<Pair<View, String>>>? = null
-    // もし設定（色など）が変わったらキャッシュを破棄するための関数
+
+    // 🌟 設定画面から戻ったときなどにキャッシュを明示的に破棄するための関数
     fun invalidateModePopupCache() {
         cachedModePopup = null
     }
+
     private fun getScreenWidth(context: Context): Int {
         if (cachedScreenWidth > 0) return cachedScreenWidth
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -42,7 +42,7 @@ object PopupManager {
     }
 
     // ==========================================
-    // 通常キーの長押しポップアップ
+    // 通常キーの長押しポップアップ (変更なし)
     // ==========================================
     fun createNormalKeyPopup(
         context: Context,
@@ -55,7 +55,6 @@ object PopupManager {
 
         val mainLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            // 🌟 文字列パースを排除し16進数リテラルを使用 (処理軽減)
             setBackgroundColor(0xD9E6E6E6.toInt())
             setPadding(8, 8, 8, 8)
         }
@@ -143,7 +142,7 @@ object PopupManager {
     }
 
     // ==========================================
-    // 左下モードボタンの長押しポップアップ
+    // 🌟 劇的にスリム化した左下モードボタンの長押しポップアップ
     // ==========================================
     fun createModeKeyPopup(
         context: Context,
@@ -153,14 +152,9 @@ object PopupManager {
         onSymbolSelected: (String) -> Unit,
         onBackspaceSelected: () -> Unit,
         onSpaceSelected: () -> Unit,
-        onSettingsColorToggle: () -> Unit,
-        onSettingsAlphaChanged: (Int) -> Unit,
-        onSettingsBrightnessChanged: (Int) -> Unit,
-        onSettingsDetailClicked: () -> Unit,
-        currentKeyTextColor: Int,
-        currentBgAlpha: Float,
-        currentBgColorPacked: Int
+        onSettingsClicked: () -> Unit // 🌟 大量の設定コールバックをこれ1つに統合！
     ): Pair<PopupWindow, List<Pair<View, String>>> {
+
         if (cachedModePopup != null) {
             val buttonY = getViewScreenLocationY(anchorView)
             val popupWindow = cachedModePopup!!.first
@@ -173,7 +167,6 @@ object PopupManager {
 
         val popupView = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            // 🌟 16進数リテラルを使用
             setBackgroundColor(0xFFEEEEEE.toInt())
             setPadding(12, 12, 12, 12)
         }
@@ -194,6 +187,7 @@ object PopupManager {
         val availableHeightAbove = max(0, buttonY - 50)
         val popupHeight = min(750, min((screenHeight * 0.8).toInt(), availableHeightAbove))
 
+        // 左側：モード切り替えリスト
         val modeScroll = ScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(260, popupHeight)
             isScrollbarFadingEnabled = false
@@ -208,15 +202,13 @@ object PopupManager {
         }
         modeScroll.addView(modeLayout)
 
+        // 右側：記号カテゴリリスト
         val rightFrame = FrameLayout(context).apply { layoutParams = LinearLayout.LayoutParams(300, popupHeight).apply { setMargins(24, 0, 0, 0) } }
         val categoryScroll = ScrollView(context)
         val categoryLayout = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         val symbolScroll = ScrollView(context).apply { visibility = View.GONE }
         val symbolLayout = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         symbolScroll.addView(symbolLayout)
-        val settingScroll = ScrollView(context).apply { visibility = View.GONE }
-        val settingLayout = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(16, 16, 16, 16) }
-        settingScroll.addView(settingLayout)
 
         KeyDatabase.extraSymbols.forEach { (category, symbols) ->
             categoryLayout.addView(TextView(context).apply {
@@ -232,7 +224,6 @@ object PopupManager {
                     })
 
                     val symCellWidth = 110
-
                     symbols.chunked(5).forEach { row ->
                         symbolLayout.addView(LinearLayout(context).apply {
                             orientation = LinearLayout.HORIZONTAL
@@ -258,35 +249,23 @@ object PopupManager {
             })
         }
 
-        categoryLayout.addView(TextView(context).apply { text = "設定"; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundResource(rippleResId); layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 130).apply { setMargins(0, 16, 0, 4) }; setOnClickListener {
-            val screenWidth = getScreenWidth(context)
-            val maxRightWidth = screenWidth - 260 - 48
-            val targetWidth = min(650, maxRightWidth)
-
-            categoryScroll.visibility = View.GONE
-            settingScroll.visibility = View.VISIBLE
-            rightFrame.layoutParams.width = targetWidth
-            rightFrame.requestLayout()
-        } })
-
-        settingLayout.addView(TextView(context).apply { text = "◀ 戻る"; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER; setBackgroundColor(0xFFD0D0D0.toInt()); layoutParams = LinearLayout.LayoutParams(-1, 120).apply { setMargins(0, 0, 0, 30) }; setOnClickListener { settingScroll.visibility = View.GONE; categoryScroll.visibility = View.VISIBLE; rightFrame.layoutParams.width = 300; rightFrame.requestLayout() } })
-
-        val colorBtn = TextView(context).apply {
-            text = if (currentKeyTextColor == Color.BLACK) "文字色を反転 (現在: 黒)" else "文字色を反転 (現在: 白)"
-            textSize = 14f; setTextColor(Color.BLACK); setPadding(0, 0, 0, 30)
+        // 🌟 変更点：ポップアップ内の複雑なSeekBar群を消去し、タップしたら即MainActivityを開くシンプルな構造に
+        categoryLayout.addView(TextView(context).apply {
+            text = "キーボード設定を開く ⚙️"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setBackgroundColor(0xFF4285F4.toInt()) // Googleブルー的な色
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 140).apply { setMargins(0, 24, 0, 4) }
             setOnClickListener {
-                onSettingsColorToggle()
-                text = if (text.contains("黒")) "文字色を反転 (現在: 白)" else "文字色を反転 (現在: 黒)"
+                onSettingsClicked()
+                popupWindow.dismiss()
             }
-        }
-        settingLayout.addView(colorBtn)
-        settingLayout.addView(TextView(context).apply { text = "画像の透過率"; setTextColor(Color.BLACK) })
-        settingLayout.addView(SeekBar(context).apply { max = 100; progress = (currentBgAlpha * 100).toInt(); setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener { override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) { onSettingsAlphaChanged(p) }; override fun onStartTrackingTouch(s: SeekBar?) {}; override fun onStopTrackingTouch(s: SeekBar?) {} }) })
-        settingLayout.addView(TextView(context).apply { text = "背景の明るさ"; setTextColor(Color.BLACK); setPadding(0, 20, 0, 0) })
-        settingLayout.addView(SeekBar(context).apply { max = 255; progress = Color.red(currentBgColorPacked); setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener { override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) { onSettingsBrightnessChanged(p) }; override fun onStartTrackingTouch(s: SeekBar?) {}; override fun onStopTrackingTouch(s: SeekBar?) {} }) })
-        settingLayout.addView(TextView(context).apply { text = "詳細設定"; textSize = 16f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setBackgroundColor(0xFF4285F4.toInt()); setPadding(20, 30, 20, 30); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 30, 0, 0) }; setOnClickListener { onSettingsDetailClicked(); popupWindow.dismiss() } })
+        })
 
-        categoryScroll.addView(categoryLayout); rightFrame.addView(categoryScroll); rightFrame.addView(symbolScroll); rightFrame.addView(settingScroll)
+        categoryScroll.addView(categoryLayout)
+        rightFrame.addView(categoryScroll)
+        rightFrame.addView(symbolScroll)
         popupView.addView(modeScroll)
         popupView.addView(rightFrame)
 
