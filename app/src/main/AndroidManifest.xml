@@ -12,13 +12,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyKeyboard">
 
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="true"
-            android:label="キーボード設定"
-            android:configChanges="orientation|screenSize"
-            android:theme="@style/Theme.MyKeyboard" />
-
         <activity android:name=".KeyEditorActivity" android:exported="false" android:label="キー一覧" android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
         <activity android:name=".KeyDetailActivity" android:exported="false" android:label="キー編集" android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
 
