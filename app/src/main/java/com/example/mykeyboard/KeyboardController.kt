@@ -117,7 +117,8 @@ class KeyboardController(
 
     private fun handleKeyTapped(buttonId: Int, keyData: KeyData) {
         val textToInput = state.currentMode.resolveText(context, themeManager, buttonId, keyData, state.isUpper)
-        val canCompose = state.currentMode == MathKeyboardService.InputMode.JAPANESE && textToInput.length == 1 &&
+        val canCompose = (state.currentMode == MathKeyboardService.InputMode.JAPANESE || state.currentMode == MathKeyboardService.InputMode.NORMAL) &&
+                textToInput.length == 1 &&
                 (textToInput[0].isLetterOrDigit() || textToInput[0] == '-' || textToInput[0] == '\\')
 
         if (canCompose) {
@@ -167,12 +168,15 @@ class KeyboardController(
     }
 
     private fun handleCandidateSelected(candidate: String) {
-        val hiraganaStr = composer.convertRomajiToHiragana(state.composingText)
-        val cleanHiragana = hiraganaStr.replace(Regex("[a-zA-Z-]+$"), "")
+        // 🌟 修正: 日本語モードの時だけ学習機能（Viterbi辞書への登録）を動かす
+        if (state.currentMode == MathKeyboardService.InputMode.JAPANESE) {
+            val hiraganaStr = composer.convertRomajiToHiragana(state.composingText)
+            val cleanHiragana = hiraganaStr.replace(Regex("[a-zA-Z-]+$"), "")
 
-        if (cleanHiragana.isNotEmpty() && candidate.isNotEmpty()) {
-            CoroutineScope(Dispatchers.IO).launch {
-                dbHelper.learnWord(candidate, cleanHiragana)
+            if (cleanHiragana.isNotEmpty() && candidate.isNotEmpty()) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    dbHelper.learnWord(candidate, cleanHiragana)
+                }
             }
         }
 
@@ -208,7 +212,14 @@ class KeyboardController(
             if (appendSpace) currentInputConnection?.commitText(" ", 1)
             return
         }
-        val textToCommit = if (state.isDirectRomajiMode) state.composingText else composer.convertRomajiToHiragana(state.composingText)
+
+        // 🌟 修正: ここも同様に JAPANESE モード以外はそのまま確定する
+        val textToCommit = if (state.isDirectRomajiMode || state.currentMode != MathKeyboardService.InputMode.JAPANESE) {
+            state.composingText
+        } else {
+            composer.convertRomajiToHiragana(state.composingText)
+        }
+
         currentInputConnection?.commitText(if (appendSpace) "$textToCommit " else textToCommit, 1)
         state = state.copy(composingText = "", isDirectRomajiMode = false, lastKeyPressTime = System.currentTimeMillis())
         updateUI()
@@ -274,7 +285,12 @@ class KeyboardController(
         if (state.composingText.isEmpty()) {
             currentInputConnection?.commitText("", 1)
         } else {
-            val previewText = if (state.isDirectRomajiMode) state.composingText else composer.convertRomajiToHiragana(state.composingText)
+            // 🌟 修正: JAPANESEモード以外（NORMAL等）なら、勝手にひらがな化せずそのまま表示する！
+            val previewText = if (state.isDirectRomajiMode || state.currentMode != MathKeyboardService.InputMode.JAPANESE) {
+                state.composingText
+            } else {
+                composer.convertRomajiToHiragana(state.composingText)
+            }
             currentInputConnection?.setComposingText(previewText, 1)
         }
         // 重い変換処理はFlowに投げてdebounceさせる
@@ -447,6 +463,10 @@ class KeyboardController(
 
                     if (bestId != null) {
                         activeTargetIds[pointerId] = bestId
+
+                        // 🌟 修正1：タッチされた瞬間に即座にViewを「押下状態」にして色を暗くする！
+                        dynamicRouterViews[bestId]?.isPressed = true
+
                         // マルチタッチバグ回避のため handleRoutedTouch を使用
                         dynamicRouterHandlers[bestId]?.handleRoutedTouch(dynamicRouterViews[bestId]!!, MotionEvent.ACTION_DOWN, x, y, event.rawX, event.rawY)
                     }
@@ -470,6 +490,7 @@ class KeyboardController(
                         val x = event.getX(pointerIndex)
                         val y = event.getY(pointerIndex)
                         val childAction = if (action == MotionEvent.ACTION_CANCEL) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP
+                        dynamicRouterViews[targetId]?.isPressed = false
                         dynamicRouterHandlers[targetId]?.handleRoutedTouch(dynamicRouterViews[targetId]!!, childAction, x, y, event.rawX, event.rawY)
                         activeTargetIds.remove(pointerId)
                     }
