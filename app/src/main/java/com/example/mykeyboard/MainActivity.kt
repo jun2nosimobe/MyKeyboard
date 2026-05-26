@@ -304,13 +304,13 @@ fun UnifiedSettingsScreen(
 
                 HorizontalDivider()
 
-                Text("各種連絡先・各種リンク", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("各種連絡先・各種リンク(一応書いてるだけです. 基本的には上のフォームで報告してください)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     // 📧 Gmail（メールアプリ起動リンク）
                     ContactLinkItem(
                         iconLabel = "✉️",
-                        title = "Gmail (メールサポート)",
+                        title = "Gmail",
                         value = "jun2nosimobe57lte@gmail.com", // 🌟 ご自身のメールアドレスへ
                         onClick = { openWebUrl(context, "jun2nosimobe57lte@gmail.com") }
                     )
@@ -439,14 +439,22 @@ fun KeyboardButtonPreviewView(
 }
 
 // 🌟 修正: Webや外部アプリへのインテントを安全に発行する関数
+// 📄 MainActivity.kt の一番下にある関数を修正
 fun openWebUrl(context: Context, url: String) {
     try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        // 🌟 mailto: から始まる場合は ACTION_SENDTO を使用し、それ以外は ACTION_VIEW を使う
+        val intent = if (url.startsWith("mailto:")) {
+            Intent(Intent.ACTION_SENDTO, Uri.parse(url))
+        } else {
+            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        }.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
+
         context.startActivity(intent)
     } catch (e: Exception) {
         e.printStackTrace()
-        Toast.makeText(context, "アプリまたはブラウザを開けませんでした", Toast.LENGTH_SHORT).show()
+        val errorMsg = if (url.startsWith("mailto:")) "メールアプリを開けませんでした" else "ブラウザを開けませんでした"
+        Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
     }
 }
