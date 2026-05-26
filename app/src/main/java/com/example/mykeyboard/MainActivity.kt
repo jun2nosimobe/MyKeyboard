@@ -289,14 +289,14 @@ fun UnifiedSettingsScreen(
 
                 // 大型の外部ウェブリンクボタン
                 OutlinedButton(
-                    onClick = { openWebUrl(context, "https://forms.gle/XXXXXX") }, // 🌟 実際のGoogleフォームURLへ
+                    onClick = { openWebUrl(context, "https://docs.google.com/forms/d/e/1FAIpQLScMS-BUBNa4BFF153kVTz3MyWnEAXl1uQ4KJrN9c5otNJN_Qw/viewform?usp=dialog") }, // 🌟 実際のGoogleフォームURLへ
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("🐛 不具合報告・要望フォームを開く")
                 }
 
                 OutlinedButton(
-                    onClick = { openWebUrl(context, "https://docs.google.com/spreadsheets/d/XXXXXX") }, // 🌟 実際のスプレッドシートURLへ
+                    onClick = { openWebUrl(context, "https://docs.google.com/spreadsheets/d/https://docs.google.com/spreadsheets/d/1KsCIRuUeROzzXSxHddzk8FXqn-sYQ9qfJ2xcHmeic4A/edit?usp=sharing") }, // 🌟 実際のスプレッドシートURLへ
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("📋 不具合対応・進捗リストを見る")
