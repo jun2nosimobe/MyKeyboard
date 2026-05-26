@@ -51,20 +51,20 @@ object KeyDatabase {
         R.id.btn_0 to KeyData("0", "0", listOf("⁰", "₀", "𝟘", "°", "∅", "Ø"), listOf("⁰", "₀", "𝟘", "°", "∅", "Ø")),
 
         // 記号
-        R.id.btn_plus to KeyData("+", "+", listOf("±", "＋", "⁺", "₊"), listOf(";", "±", "＋", "⁺", "₊")),
+        R.id.btn_plus to KeyData("+", "+", listOf("±", "＋", "⁺", "₊", "|"), listOf(";", "±", "＋", "⁺", "₊", "|")),
         R.id.btn_minus to KeyData("-", "-", listOf("—", "–", "∓", "⁻", "₋"), listOf("=", "—", "–", "∓", "⁻", "₋")),
-        R.id.btn_asterisk to KeyData("*", "*", listOf("×", "⊗", "∙", "∘", "cdot", "times", "★"), listOf(":", "×", "⊗", "∙", "∘", "cdot", "times", "★")),
+        R.id.btn_asterisk to KeyData("*", "*", listOf("×", "⊗", "∙", "∘", "cdot", "times", "★", "&"), listOf(":", "×", "⊗", "∙", "∘", "cdot", "times", "★", "&")),
         R.id.btn_slash to KeyData("/", "/", listOf("÷", "／", "div"), listOf("?", "÷", "／", "div")),
         R.id.btn_equal to KeyData("=", "=", listOf("≠", "⁼", "₌"), listOf("≠", "⁼", "₌")),
         R.id.btn_caret to KeyData("^", "^", listOf("\u0302", "\u0303", "\u0304", "\u0307", "\u0308", "\u030A", "\u20D7", "\u0301", "\u0300", "\u030C", "∧", "↑"), listOf("\u0302", "\u0303", "\u0304", "\u0307", "\u0308", "\u030A", "\u20D7", "\u0301", "\u0300", "\u030C", "∧", "~", "↑")),
         R.id.btn_underscore to KeyData("_", "_", listOf("＿", "↓", "\u0331", "\u0323", "\u0324", "\u0330", "\u00b8"), listOf("＿", "↓", "\u0331", "\u0323", "\u0324", "\u0330", "\u00b8")),
         R.id.btn_backslash to KeyData("\\", "\\", listOf("＼", "∖", "\u0338", "\u20DD", "\u20DE", "\u20E1"), listOf("＼", "∖", "\u0338", "\u20DD", "\u20DE", "\u20E1")),
-        R.id.btn_paren_l to KeyData("(", "[", listOf("[", "⟨", "「"), listOf("[", "⟨", "「")),
-        R.id.btn_paren_r to KeyData(")", "]", listOf("]", "⟩", "」"), listOf("]", "⟩", "」")),
+        R.id.btn_paren_l to KeyData("(", "[", listOf("[", "⟨", "「","\"", "'", "`"), listOf("[", "⟨", "「","\"", "'", "`")),
+        R.id.btn_paren_r to KeyData(")", "]", listOf("]", "⟩", "」","\"", "'"), listOf("]", "⟩", "」","\"", "'")),
         R.id.btn_brace_l to KeyData("{", "{", listOf("<", "≤", "≦"), listOf("<", "≤", "≦")),
         R.id.btn_brace_r to KeyData("}", "}", listOf(">", "≥", "≧"), listOf(">", "≥", "≧")),
         R.id.btn_comma to KeyData(",", ",", listOf("∙", ":", ";", "，", "、"), listOf("∙", ":", ";", "，", "、")),
-        R.id.btn_period to KeyData(".", ".", listOf(":", ";", "\"", "'", "`", "．", "。"), listOf(":", ";", "\"", "'", "`", "?", "!", "．", "。"))
+        R.id.btn_period to KeyData(".", ".", listOf("!", "?", ";", "．", "。"), listOf(";", "！", "？", "．", "。"))
     )
 
 

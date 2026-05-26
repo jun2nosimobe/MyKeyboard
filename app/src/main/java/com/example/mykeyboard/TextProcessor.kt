@@ -12,6 +12,21 @@ object TextProcessor {
     private val symbolMap = mapOf('a' to "∀", 'A' to "&", 'b' to "∵", 'B' to "♭", 'c' to "⊂", 'C' to "⊆", 'd' to "∂", 'D' to "∇", 'e' to "∃", 'E' to "∈", 'f' to "∫", 'F' to "∬", 'g' to "≥", 'G' to "≧", 'h' to "#", 'H' to "⇔", 'i' to "∞", 'I' to "!", 'j' to "<", 'J' to ">", 'k' to "≅", 'K' to "≡", 'l' to "≤", 'L' to "≦", 'm' to "|", 'M' to "?", 'n' to "≠", 'N' to "¬", 'o' to "⊕", 'O' to "∅", 'p' to "∏", 'P' to "∐", 'q' to "≃", 'Q' to "∎", 'r' to "√", 'R' to "∋", 's' to "∑", 'S' to "∼", 't' to "∴", 'T' to "△", 'u' to "∪", 'U' to "⋁", 'v' to "⊃", 'V' to "⊇", 'w' to "→", 'W' to "←", 'x' to "×", 'X' to "⊗", 'y' to "⋂", 'Y' to "⋀", 'z' to "⇒", 'Z' to "⇐")
     private val scriptMap = mapOf('a' to "𝒶", 'A' to "𝒜", 'b' to "𝒷", 'B' to "ℬ", 'c' to "𝒸", 'C' to "𝒞", 'd' to "𝒹", 'D' to "𝒟", 'e' to "ℯ", 'E' to "ℰ", 'f' to "𝒻", 'F' to "ℱ", 'g' to "ℊ", 'G' to "𝒢", 'h' to "𝒽", 'H' to "ℋ", 'i' to "𝒾", 'I' to "ℐ", 'j' to "𝒿", 'J' to "𝒥", 'k' to "𝓀", 'K' to "𝒦", 'l' to "𝓁", 'L' to "ℒ", 'm' to "𝓂", 'M' to "ℳ", 'n' to "𝓃", 'N' to "𝒩", 'o' to "ℴ", 'O' to "𝒪", 'p' to "𝓅", 'P' to "𝒫", 'q' to "𝓆", 'Q' to "𝒬", 'r' to "𝓇", 'R' to "ℛ", 's' to "𝓈", 'S' to "𝒮", 't' to "𝓉", 'T' to "𝒯", 'u' to "𝓊", 'U' to "𝒰", 'v' to "𝓋", 'V' to "𝒱", 'w' to "𝓌", 'W' to "𝒲", 'x' to "𝓍", 'X' to "𝒳", 'y' to "𝓎", 'Y' to "𝒴", 'z' to "𝓏", 'Z' to "𝒵")
 
+    private val boldScriptMap = mapOf(
+        'A' to "𝓐", 'B' to "𝓑", 'C' to "𝓒", 'D' to "𝓓", 'E' to "𝓔",
+        'F' to "𝓕", 'G' to "𝓖", 'H' to "𝓗", 'I' to "𝓘", 'J' to "𝓙",
+        'K' to "𝓚", 'L' to "𝓛", 'M' to "𝓜", 'N' to "𝓝", 'O' to "𝓞",
+        'P' to "𝓟", 'Q' to "𝓠", 'R' to "𝓡", 'S' to "𝓢", 'T' to "𝓣",
+        'U' to "𝓤", 'V' to "𝓥", 'W' to "𝓦", 'X' to "𝓧", 'Y' to "𝓨",
+        'Z' to "𝓩",
+        'a' to "𝓪", 'b' to "𝓫", 'c' to "𝓬", 'd' to "𝓭", 'e' to "𝓮",
+        'f' to "𝓯", 'g' to "𝓰", 'h' to "𝓱", 'i' to "𝓲", 'j' to "𝓳",
+        'k' to "𝓴", 'l' to "𝓵", 'm' to "𝓶", 'n' to "𝓷", 'o' to "𝓸",
+        'p' to "𝓹", 'q' to "𝓺", 'r' to "𝓻", 's' to "𝓼", 't' to "𝓽",
+        'u' to "𝓾", 'v' to "𝓿", 'w' to "𝔀", 'x' to "𝔁", 'y' to "𝔂",
+        'z' to "𝔃"
+    )
+
     // 🌟 劇的な最適化：オブジェクトを生成せず、直接文字列を構築する（爆速化）
     fun toBlackboard(str: String): String = buildString(str.length) {
         for (i in str.indices) {
@@ -83,6 +98,12 @@ object TextProcessor {
     }
     fun toMathscript(str: String): String = buildString(str.length) {
         for (i in str.indices) { val c = str[i]; append(scriptMap[c] ?: c) }
+    }
+    fun toBoldMathscript(str: String): String = buildString(str.length * 2) {
+        for (i in str.indices) {
+            val c = str[i]
+            append(boldScriptMap[c] ?: c)
+        }
     }
     fun toSuperscript(str: String): String = buildString(str.length) {
         for (i in str.indices) { val c = str[i]; append(superscriptMap[c] ?: c) }

@@ -44,15 +44,24 @@ class EnglishDictionaryHelper(private val context: Context) :
 
     // 🌟 英語辞書専用の爆速リロード機能
     fun reloadDatabase() {
+        // 1. まず現在開いているデータベースの接続を完全に閉じる（超重要！）
         close()
-        File(dbFile.path + "-wal").delete()
-        File(dbFile.path + "-shm").delete()
 
-        val externalFile = File(context.getExternalFilesDir(null), DB_NAME)
+        // 2. PCから adb push された外部ストレージのファイルパス
+        val externalFile = File(context.getExternalFilesDir(null), "eng_dict.db")
+
+        // 3. Androidアプリが実際に読み込む内部データベースのパス
+        val internalDbFile = context.getDatabasePath("eng_dict.db")
+
         if (externalFile.exists()) {
-            externalFile.copyTo(dbFile, overwrite = true)
+            try {
+                // 内部データベースを上書きコピー
+                externalFile.copyTo(internalDbFile, overwrite = true)
+                // コピー成功後、次に検索が走ったときに新しいDBで開かれるようになります
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
-        writableDatabase
     }
 
     override fun onCreate(db: SQLiteDatabase?) {

@@ -19,7 +19,7 @@ class MathKeyboardService : InputMethodService() {
         MATHCAL("CAL", "Mathcal", { TextProcessor.toMathscript(it) }),
         TEXTBF("B", "Bold", { TextProcessor.toTextbf(it) }),
         GREEK("GRK", "Greek", { TextProcessor.toGreek(it) }),
-        MATHSCRIPT("SCR", "Script", { TextProcessor.toMathscript(it) }),
+        MATHSCRIPT("SCR", "Script", { TextProcessor.toBoldMathscript(it) }),
         MATHSYMBOL("SYM", "Symbol", { TextProcessor.toMathsymbol(it) }),
         SUPERSCRIPT("SUP", "Super", { TextProcessor.toSuperscript(it) }),
         SUBSCRIPT("SUB", "Sub", { TextProcessor.toSubscript(it) }),

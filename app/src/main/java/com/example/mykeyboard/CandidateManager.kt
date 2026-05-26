@@ -28,23 +28,42 @@ class CandidateManager(
         }
 
         // ==========================================
-        // 🌟 NEW: 英語モード または TeXコマンド (\始まり) の処理を最優先でインターセプト！
+        // 英語モード または TeXコマンド (\始まり) の処理
         // ==========================================
         if (state.currentMode == MathKeyboardService.InputMode.NORMAL || rawStr.startsWith("\\")) {
 
-            // 英語辞書からサジェストを取得 (例: "homo" -> ["homomorphism", "homology"...])
+            // 英語辞書からサジェストを取得
             val engSuggestions = engDbHelper.getEnglishSuggestions(rawStr, limit = 15)
 
-            // 戻り値の型に合わせて Pair(word, word) に変換
-            val engPairs = engSuggestions.map { Pair(it, it) }
+            // 🌟 入力文字列のケース（大文字・小文字）パターンを判定
+            // ※英数字以外の文字（ハイフンなど）が含まれるケースを考慮し、文字が存在し、かつすべての英文字が大文字かをチェック
+            val isAllUpperCase = rawStr.isNotEmpty() && rawStr.any { it.isLetter() } && rawStr.filter { it.isLetter() }.all { it.isUpperCase() }
+            val isFirstCharUpperCase = rawStr.isNotEmpty() && rawStr[0].isUpperCase()
+
+            // 戻り値の型に合わせて Pair(word, word) に変換しつつ、ケースを反映
+            val engPairs = engSuggestions.map { word ->
+                val displayWord = when {
+                    // TeXコマンド(\始まり)の場合はケース変換をスキップ
+                    word.startsWith("\\") -> word
+
+                    // 🌟 パターン1: 全文字大文字の場合
+                    isAllUpperCase -> word.uppercase()
+
+                    // 🌟 パターン2: 先頭のみ大文字の場合
+                    isFirstCharUpperCase -> word.replaceFirstChar { it.uppercaseChar() }
+
+                    // パターン3: すべて小文字の場合
+                    else -> word
+                }
+                Pair(displayWord, displayWord)
+            }
             finalCandidates.addAll(engPairs)
 
-            // IMEのお約束：入力中の生文字列(rawStr)は、一番左(先頭)に確定候補として置いておく
+            // 入力中の生文字列(rawStr)は一番左(先頭)に確定候補として置いておく
             if (finalCandidates.none { it.first == rawStr }) {
                 finalCandidates.add(0, Pair(rawStr, rawStr))
             }
 
-            // 🌟 英語モードの時はここでリターンし、重い日本語処理（Viterbi等）をスキップする！
             return finalCandidates
         }
 

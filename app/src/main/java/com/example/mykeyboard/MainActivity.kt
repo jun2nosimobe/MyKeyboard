@@ -3,7 +3,12 @@ package com.example.mykeyboard
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
+import android.widget.ImageView
+import android.widget.RelativeLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,6 +17,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,16 +31,10 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.mykeyboard.ui.theme.MyKeyboardTheme
 import java.io.File
 import java.io.FileOutputStream
-import android.view.LayoutInflater
-import android.widget.ImageView
-import android.widget.RelativeLayout
-import android.widget.TextView
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.viewinterop.AndroidView
-import android.net.Uri
 
 class MainActivity : ComponentActivity() {
 
@@ -52,14 +52,11 @@ class MainActivity : ComponentActivity() {
                     UnifiedSettingsScreen(
                         modifier = Modifier.padding(innerPadding),
                         onReloadRequested = {
-                            // 1. マトリクスの再読み込み
                             matrixManager.reloadMatrix()
 
-                            // 2. 日本語辞書の再読み込み
                             val dictHelper = DictionaryDatabaseHelper(this@MainActivity)
                             dictHelper.reloadDatabase()
 
-                            // 3. 🌟 英語辞書の再読み込み
                             val engDictHelper = EnglishDictionaryHelper(this@MainActivity)
                             engDictHelper.reloadDatabase()
 
@@ -84,13 +81,11 @@ fun UnifiedSettingsScreen(
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("KeyboardSettings", Context.MODE_PRIVATE)
 
-    // --- 💾 状態管理 (SharedPreferences と同期) ---
     var bgImagePath by remember { mutableStateOf(prefs.getString("bgImagePath", null)) }
-    var keyTextColor by remember { mutableIntStateOf(prefs.getInt("keyTextColor", AndroidColor.BLACK)) }
-    var bgAlpha by remember { mutableFloatStateOf(prefs.getFloat("bgAlpha", 0.4f)) }
-    var bgColorPacked by remember { mutableIntStateOf(prefs.getInt("bgColorPacked", AndroidColor.parseColor("#ECECEC"))) }
+    var keyTextColor by remember { mutableStateOf(prefs.getInt("keyTextColor", AndroidColor.BLACK)) }
+    var bgAlpha by remember { mutableStateOf(prefs.getFloat("bgAlpha", 0.4f)) }
+    var bgColorPacked by remember { mutableStateOf(prefs.getInt("bgColorPacked", AndroidColor.parseColor("#ECECEC"))) }
 
-    // --- 🖼️ 画像ピッカーの設定 ---
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             try {
@@ -122,9 +117,7 @@ fun UnifiedSettingsScreen(
     ) {
         Text("キーボード設定", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
-        // ==========================================
-        // 🌟 NEW: リアルタイム・プレビュー領域
-        // ==========================================
+        // リアルタイム・プレビュー領域
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -138,9 +131,8 @@ fun UnifiedSettingsScreen(
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                 )
 
-                // 🌟 ここで先ほど作った Composable を呼び出す
-                KeyboardPreviewView(
-                    modifier = Modifier.fillMaxWidth().height(250.dp), // 実際のキーボードの高さに合わせて調整
+                KeyboardButtonPreviewView(
+                    modifier = Modifier.fillMaxWidth().height(250.dp),
                     keyTextColor = keyTextColor,
                     bgAlpha = bgAlpha,
                     bgColorPacked = bgColorPacked,
@@ -149,9 +141,7 @@ fun UnifiedSettingsScreen(
             }
         }
 
-        // ==========================================
-        // 🎨 1. 見た目の設定 (Appearance)
-        // ==========================================
+        // 1. 見た目の設定 (Appearance)
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -159,7 +149,6 @@ fun UnifiedSettingsScreen(
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("🎨 見た目のカスタマイズ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
-                // 🌑 文字色の反転
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Text("キーの文字色")
                     Button(onClick = {
@@ -171,9 +160,8 @@ fun UnifiedSettingsScreen(
                     }
                 }
 
-                Divider()
+                HorizontalDivider()
 
-                // 🖼️ 背景画像
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Column {
                         Text("背景画像")
@@ -186,7 +174,6 @@ fun UnifiedSettingsScreen(
                     }
                 }
 
-                // 🌫️ 透過率スライダー
                 Column {
                     Text("画像の透過率: ${(bgAlpha * 100).toInt()}%")
                     Slider(
@@ -199,14 +186,12 @@ fun UnifiedSettingsScreen(
                     )
                 }
 
-                Divider()
+                HorizontalDivider()
 
-                // 🔆 背景の明るさ（土台の色）スライダー
                 Column {
                     val currentBrightness = AndroidColor.red(bgColorPacked)
                     Text("背景の明るさ (土台の色): $currentBrightness / 255")
 
-                    // 色のプレビューボックス
                     Box(modifier = Modifier
                         .fillMaxWidth()
                         .height(30.dp)
@@ -226,7 +211,6 @@ fun UnifiedSettingsScreen(
                     )
                 }
 
-                // ♻️ リセットボタン
                 OutlinedButton(
                     onClick = {
                         prefs.edit().remove("bgImagePath").apply()
@@ -244,9 +228,7 @@ fun UnifiedSettingsScreen(
             }
         }
 
-        // ==========================================
-        // ⌨️ 2. キー配列設定 (Layout)
-        // ==========================================
+        // 2. キー配列設定 (Layout)
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
@@ -264,9 +246,7 @@ fun UnifiedSettingsScreen(
             }
         }
 
-        // ==========================================
-        // 🛠️ 3. 開発者メニュー (Developer)
-        // ==========================================
+        // 3. 開発者メニュー (Developer)
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
@@ -288,13 +268,102 @@ fun UnifiedSettingsScreen(
             }
         }
 
+        // ==========================================
+        // 🌟 NEW: アプリ説明・サポート・各種リンク集
+        // ==========================================
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("💬 アプリについて & サポート", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                Text(
+                    text = "数式環境や論文執筆、高度な計算をスムーズに行うための数学特化型IMEです。英語の数学用語サジェスト、TeXコマンド補完、日本語のかな漢字変換パイプラインを搭載しています。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider()
+
+                // 大型の外部ウェブリンクボタン
+                OutlinedButton(
+                    onClick = { openWebUrl(context, "https://forms.gle/XXXXXX") }, // 🌟 実際のGoogleフォームURLへ
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("🐛 不具合報告・要望フォームを開く")
+                }
+
+                OutlinedButton(
+                    onClick = { openWebUrl(context, "https://docs.google.com/spreadsheets/d/XXXXXX") }, // 🌟 実際のスプレッドシートURLへ
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("📋 不具合対応・進捗リストを見る")
+                }
+
+                HorizontalDivider()
+
+                Text("各種連絡先・各種リンク", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // 📧 Gmail（メールアプリ起動リンク）
+                    ContactLinkItem(
+                        iconLabel = "✉️",
+                        title = "Gmail (メールサポート)",
+                        value = "support@example.com", // 🌟 ご自身のメールアドレスへ
+                        onClick = { openWebUrl(context, "mailto:support@example.com") }
+                    )
+
+                    // 🐦 Twitter / X
+                    ContactLinkItem(
+                        iconLabel = "🐦",
+                        title = "Twitter / X",
+                        value = "@your_twitter_handle", // 🌟 アカウント名へ
+                        onClick = { openWebUrl(context, "https://x.com/your_twitter_handle") }
+                    )
+
+                    // 💻 GitHub
+                    ContactLinkItem(
+                        iconLabel = "💻",
+                        title = "GitHub Repository",
+                        value = "github.com/your-repo/ime", // 🌟 リポジトリURLへ
+                        onClick = { openWebUrl(context, "https://github.com/your-repo/ime") }
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(20.dp))
     }
 }
 
+// 🌟 NEW: 各種リンク用のリストスタイルUIコンポーネント
+@Composable
+fun ContactLinkItem(
+    iconLabel: String,
+    title: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(iconLabel, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(end = 12.dp))
+        Column(modifier = Modifier.weight(1.0f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(value, style = MaterialTheme.typography.bodySmall, color = ComposeColor.Gray)
+        }
+        Text("🔗", style = MaterialTheme.typography.bodySmall, color = ComposeColor.LightGray)
+    }
+}
 
 @Composable
-fun KeyboardPreviewView(
+fun KeyboardButtonPreviewView(
     modifier: Modifier = Modifier,
     keyTextColor: Int,
     bgAlpha: Float,
@@ -304,22 +373,14 @@ fun KeyboardPreviewView(
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            // 🌟 修正：R.layout.keyboard_layout を R.layout.keyboard_view に変更
             val view = LayoutInflater.from(context).inflate(R.layout.keyboard_view, null)
-
-            // プレビューなので、誤操作を防ぐためにタッチイベントを無効化
             view.setOnTouchListener { _, _ -> true }
-
             view
         },
         update = { view ->
-            // 🌟 スライダーなどの状態（State）が変わるたびにここが自動で呼ばれ、見た目が更新される
-
-            // 1. 背景の明るさ（土台の色）を適用
             val rootLayout = view.findViewById<RelativeLayout>(R.id.keyboard_root_layout)
             rootLayout?.setBackgroundColor(bgColorPacked)
 
-            // 2. 背景画像と透過率を適用
             val bgImage = view.findViewById<ImageView>(R.id.keyboard_bg)
             if (bgImagePath != null && File(bgImagePath).exists()) {
                 bgImage?.setImageURI(Uri.fromFile(File(bgImagePath)))
@@ -329,12 +390,23 @@ fun KeyboardPreviewView(
             }
             bgImage?.alpha = bgAlpha
 
-            // 3. 文字色をすべてのキーに適用
-            // （※KeyDatabaseのIDリストを使って一括更新するか、主要なキーIDを直接指定します）
             val controlKeys = listOf(R.id.btn_shift, R.id.btn_space, R.id.btn_delete, R.id.btn_enter, R.id.btn_mode, R.id.btn_comma, R.id.btn_period)
             (KeyDatabase.keys.keys + controlKeys).forEach { id ->
                 view.findViewById<TextView>(id)?.setTextColor(keyTextColor)
             }
         }
     )
+}
+
+// 🌟 修正: Webや外部アプリへのインテントを安全に発行する関数
+fun openWebUrl(context: Context, url: String) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        Toast.makeText(context, "アプリまたはブラウザを開けませんでした", Toast.LENGTH_SHORT).show()
+    }
 }
