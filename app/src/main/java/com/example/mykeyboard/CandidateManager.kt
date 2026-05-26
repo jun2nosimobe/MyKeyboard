@@ -2,6 +2,7 @@ package com.example.mykeyboard
 
 class CandidateManager(
     private val dbHelper: DictionaryDatabaseHelper,
+    private val engDbHelper: EnglishDictionaryHelper,
     private val viterbiConverter: JapaneseConverter,
     private val composer: Composer,
     private val matrix: MatrixManager
@@ -23,6 +24,27 @@ class CandidateManager(
                     finalCandidates.addAll(predictions)
                 }
             }
+            return finalCandidates
+        }
+
+        // ==========================================
+        // 🌟 NEW: 英語モード または TeXコマンド (\始まり) の処理を最優先でインターセプト！
+        // ==========================================
+        if (state.currentMode == MathKeyboardService.InputMode.NORMAL || rawStr.startsWith("\\")) {
+
+            // 英語辞書からサジェストを取得 (例: "homo" -> ["homomorphism", "homology"...])
+            val engSuggestions = engDbHelper.getEnglishSuggestions(rawStr, limit = 15)
+
+            // 戻り値の型に合わせて Pair(word, word) に変換
+            val engPairs = engSuggestions.map { Pair(it, it) }
+            finalCandidates.addAll(engPairs)
+
+            // IMEのお約束：入力中の生文字列(rawStr)は、一番左(先頭)に確定候補として置いておく
+            if (finalCandidates.none { it.first == rawStr }) {
+                finalCandidates.add(0, Pair(rawStr, rawStr))
+            }
+
+            // 🌟 英語モードの時はここでリターンし、重い日本語処理（Viterbi等）をスキップする！
             return finalCandidates
         }
 

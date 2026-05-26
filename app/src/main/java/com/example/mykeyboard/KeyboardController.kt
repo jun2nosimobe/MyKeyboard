@@ -32,9 +32,10 @@ class KeyboardController(
     // 各モジュールのインスタンス
     private val composer = Composer()
     private val dbHelper = DictionaryDatabaseHelper(context)
+    private val engDbHelper = EnglishDictionaryHelper(context)
     private val matrixManager = MatrixManager(context)
     private val viterbiConverter = JapaneseConverter(dbHelper, matrixManager)
-    private val candidateManager = CandidateManager(dbHelper, viterbiConverter, composer, matrixManager)
+    private val candidateManager = CandidateManager(dbHelper, engDbHelper, viterbiConverter, composer, matrixManager)
 
     // UI参照
     private val candidateScroll: HorizontalScrollView? = keyboardView.findViewById(R.id.candidate_scroll)
