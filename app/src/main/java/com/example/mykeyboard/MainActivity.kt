@@ -310,24 +310,31 @@ fun UnifiedSettingsScreen(
                     ContactLinkItem(
                         iconLabel = "✉️",
                         title = "Gmail (メールサポート)",
-                        value = "support@example.com", // 🌟 ご自身のメールアドレスへ
-                        onClick = { openWebUrl(context, "mailto:support@example.com") }
+                        value = "jun2nosimobe57lte@gmail.com", // 🌟 ご自身のメールアドレスへ
+                        onClick = { openWebUrl(context, "jun2nosimobe57lte@gmail.com") }
                     )
 
                     // 🐦 Twitter / X
                     ContactLinkItem(
                         iconLabel = "🐦",
-                        title = "Twitter / X",
-                        value = "@your_twitter_handle", // 🌟 アカウント名へ
-                        onClick = { openWebUrl(context, "https://x.com/your_twitter_handle") }
+                        title = "Twitter",
+                        value = "@jun2nosimobe", // 🌟 アカウント名へ
+                        onClick = { openWebUrl(context, "https://x.com/jun2nosimobe") }
+                    )
+
+                    ContactLinkItem(
+                        iconLabel = "\uD83E\uDD6D",
+                        title = "mixi2",
+                        value = "@jun2nosimobe", // 🌟 アカウント名へ
+                        onClick = { openWebUrl(context, "https://mixi.social/@jun2nosimobe") }
                     )
 
                     // 💻 GitHub
                     ContactLinkItem(
                         iconLabel = "💻",
                         title = "GitHub Repository",
-                        value = "github.com/your-repo/ime", // 🌟 リポジトリURLへ
-                        onClick = { openWebUrl(context, "https://github.com/your-repo/ime") }
+                        value = "jun2nosimobe/MyKeyboard", // 🌟 リポジトリURLへ
+                        onClick = { openWebUrl(context, "https://github.com/jun2nosimobe/MyKeyboard") }
                     )
                 }
             }

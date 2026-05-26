@@ -77,7 +77,7 @@ class KeyboardController(
         // 🌟 変換計算の非同期パイプライン (Debounce 50ms)
         controllerScope.launch {
             stateFlow
-                .debounce(100L)
+                .debounce(20L)
                 .distinctUntilChangedBy { it.composingText }
                 .collectLatest { currentState ->
                     if (currentState.composingText.isEmpty() && currentState.lastConfirmedWord.isEmpty()) {

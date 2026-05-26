@@ -37,7 +37,9 @@ class CandidateManager(
 
             // 🌟 入力文字列のケース（大文字・小文字）パターンを判定
             // ※英数字以外の文字（ハイフンなど）が含まれるケースを考慮し、文字が存在し、かつすべての英文字が大文字かをチェック
-            val isAllUpperCase = rawStr.isNotEmpty() && rawStr.any { it.isLetter() } && rawStr.filter { it.isLetter() }.all { it.isUpperCase() }
+            val isAllUpperCase = rawStr.length > 1 && rawStr.any { it.isLetter() } && rawStr.filter { it.isLetter() }.all { it.isUpperCase() }
+
+            // 1文字以上の入力で、先頭が大文字の場合（1文字だけ大文字の場合もここに入る）
             val isFirstCharUpperCase = rawStr.isNotEmpty() && rawStr[0].isUpperCase()
 
             // 戻り値の型に合わせて Pair(word, word) に変換しつつ、ケースを反映
@@ -59,9 +61,16 @@ class CandidateManager(
             }
             finalCandidates.addAll(engPairs)
 
-            // 入力中の生文字列(rawStr)は一番左(先頭)に確定候補として置いておく
+            val exactMatchExists = engSuggestions.any { it.equals(rawStr, ignoreCase = true) }
+
             if (finalCandidates.none { it.first == rawStr }) {
-                finalCandidates.add(0, Pair(rawStr, rawStr))
+                if (exactMatchExists) {
+                    // 辞書に完全一致する単語がある場合は、安心して一番左（先頭）に確定候補として置く
+                    finalCandidates.add(0, Pair(rawStr, rawStr))
+                } else {
+                    // 入力途中など、完全一致しない場合はサジェストの邪魔にならないよう一番右（最後尾）に置く
+                    finalCandidates.add(Pair(rawStr, rawStr))
+                }
             }
 
             return finalCandidates
