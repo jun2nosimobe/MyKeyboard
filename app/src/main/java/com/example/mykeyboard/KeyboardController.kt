@@ -174,8 +174,15 @@ class KeyboardController(
             val cleanHiragana = hiraganaStr.replace(Regex("[a-zA-Z-]+$"), "")
 
             if (cleanHiragana.isNotEmpty() && candidate.isNotEmpty()) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    dbHelper.learnWord(candidate, cleanHiragana)
+                // 🌟 NEW: 設定（SharedPreferences）からβ版学習機能のオン/オフを読み取る
+                val prefs = context.getSharedPreferences("KeyboardSettings", Context.MODE_PRIVATE)
+                val isLearningEnabled = prefs.getBoolean("enableLearningBeta", false)
+
+                // 設定がON(true)の時だけ、裏で学習処理を走らせる
+                if (isLearningEnabled) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        dbHelper.learnWord(candidate, cleanHiragana)
+                    }
                 }
             }
         }

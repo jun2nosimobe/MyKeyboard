@@ -85,6 +85,7 @@ fun UnifiedSettingsScreen(
     var keyTextColor by remember { mutableStateOf(prefs.getInt("keyTextColor", AndroidColor.BLACK)) }
     var bgAlpha by remember { mutableStateOf(prefs.getFloat("bgAlpha", 0.4f)) }
     var bgColorPacked by remember { mutableStateOf(prefs.getInt("bgColorPacked", AndroidColor.parseColor("#ECECEC"))) }
+    var enableLearningBeta by remember { mutableStateOf(prefs.getBoolean("enableLearningBeta", false)) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -335,6 +336,38 @@ fun UnifiedSettingsScreen(
                         title = "GitHub Repository",
                         value = "jun2nosimobe/MyKeyboard", // 🌟 リポジトリURLへ
                         onClick = { openWebUrl(context, "https://github.com/jun2nosimobe/MyKeyboard") }
+                    )
+                }
+            }
+        }
+
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("🧪 実験的機能 (Beta)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text("入力学習機能 (日本語)", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "確定した変換を記憶し、次回の予測候補の優先度を上げます。予期せぬ動作をする可能性があるためβ版として提供しています。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    Switch(
+                        checked = enableLearningBeta,
+                        onCheckedChange = { isChecked ->
+                            enableLearningBeta = isChecked
+                            prefs.edit().putBoolean("enableLearningBeta", isChecked).apply()
+                        }
                     )
                 }
             }
