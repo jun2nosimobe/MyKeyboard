@@ -52,11 +52,18 @@ class MainActivity : ComponentActivity() {
                     UnifiedSettingsScreen(
                         modifier = Modifier.padding(innerPadding),
                         onReloadRequested = {
-                            // 🌟 マトリクスと辞書の再読込
+                            // 1. マトリクスの再読み込み
                             matrixManager.reloadMatrix()
+
+                            // 2. 日本語辞書の再読み込み
                             val dictHelper = DictionaryDatabaseHelper(this@MainActivity)
                             dictHelper.reloadDatabase()
-                            Toast.makeText(this, "辞書・マトリクスを再読み込みしました！", Toast.LENGTH_SHORT).show()
+
+                            // 3. 🌟 英語辞書の再読み込み
+                            val engDictHelper = EnglishDictionaryHelper(this@MainActivity)
+                            engDictHelper.reloadDatabase()
+
+                            Toast.makeText(this@MainActivity, "すべての辞書・マトリクスを再読み込みしました！", Toast.LENGTH_SHORT).show()
                         },
                         onOpenKeyEditor = {
                             startActivity(Intent(this, KeyEditorActivity::class.java))
