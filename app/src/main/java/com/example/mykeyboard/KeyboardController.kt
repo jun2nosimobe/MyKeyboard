@@ -53,8 +53,47 @@ class KeyboardController(
     private var isCacheInitialized = false
 
     private val VOWELS = setOf("a", "i", "u", "e", "o")
-    private val CONSONANTS = setOf("k", "s", "t", "n", "h", "m", "y", "r", "w", "g", "z", "d", "b", "p", "j", "c", "f", "l", "v", "q", "x")
-    private val defaultKeyWeights = mapOf("a" to 0.9f, "i" to 0.9f, "u" to 0.9f, "e" to 0.9f, "o" to 0.9f, "k" to 0.95f, "s" to 0.95f, "t" to 0.95f, "n" to 0.95f)
+
+    // 🌟 タッチ判定(当たり判定)の重み。以前は 1.5・2.5・3.0 等を全て決め打ちしていたが、
+    // mine_key_weights.py で数学コーパスの実際のローマ字ビグラム頻度から算出した
+    // key_bigram_weights.json を読み込むように変更した（assetsから1回だけロード）。
+    // 読み込みに失敗した場合は空のマップになり、倍率が一切かからない
+    // (=無調整、フォールバックとして安全)。
+    private val keyWeightData: KeyWeightData = loadKeyWeightData()
+    private val defaultKeyWeights: Map<String, Float> get() = keyWeightData.baselineWeight
+
+    private data class KeyWeightData(
+        val bigramMultiplier: Map<Char, Map<Char, Float>>,
+        val baselineWeight: Map<String, Float>
+    )
+
+    private fun loadKeyWeightData(): KeyWeightData {
+        return try {
+            val json = context.assets.open("key_bigram_weights.json").bufferedReader().use { it.readText() }
+            val root = org.json.JSONObject(json)
+
+            val bigramObj = root.optJSONObject("bigram_multiplier")
+            val bigramMap = mutableMapOf<Char, Map<Char, Float>>()
+            bigramObj?.keys()?.forEach { prevKey ->
+                if (prevKey.isEmpty()) return@forEach
+                val row = bigramObj.getJSONObject(prevKey)
+                val rowMap = mutableMapOf<Char, Float>()
+                row.keys().forEach { nextKey ->
+                    if (nextKey.isNotEmpty()) rowMap[nextKey[0]] = row.getDouble(nextKey).toFloat()
+                }
+                bigramMap[prevKey[0]] = rowMap
+            }
+
+            val baseObj = root.optJSONObject("baseline_weight")
+            val baseMap = mutableMapOf<String, Float>()
+            baseObj?.keys()?.forEach { key -> baseMap[key] = baseObj.getDouble(key).toFloat() }
+
+            KeyWeightData(bigramMap, baseMap)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            KeyWeightData(emptyMap(), emptyMap())
+        }
+    }
 
     private var lastShiftTime: Long = 0
     private val DOUBLE_TAP_TIMEOUT = 400L
@@ -448,17 +487,15 @@ class KeyboardController(
                                 contextWeight *= 0.5f // 2分の1の評価にする（必要に応じて 0.2f などに調整してください）
                             }
                             else if (state.lastChar != null) {
-                                val last = state.lastChar.toString()
-                                if (label == last && label in CONSONANTS && label != "n") {
-                                    contextWeight *= 1.5f // 促音
-                                } else {
-                                    when (state.lastChar) {
-                                        'n' -> if (label in VOWELS || label == "y" || label == "n") contextWeight *= 2.5f else contextWeight *= 0.5f
-                                        's', 'k', 't', 'm', 'r', 'g', 'z', 'd', 'b', 'p', 'c', 'f', 'v', 'w', 'j', 'l', 'q', 'x', 'h' ->
-                                            if (label in VOWELS || label == "y") contextWeight *= 3.0f else contextWeight *= 0.2f
-                                        'y' -> if (label in setOf("a", "u", "o")) contextWeight *= 3.0f else contextWeight *= 0.2f
-                                        '\\' -> if (label.length == 1 && label[0].isLetter()) contextWeight *= 2.0f
-                                    }
+                                if (state.lastChar == '\\') {
+                                    // TeXコマンド直後(\から始まる)は文脈が全く異なるので
+                                    // ローマ字ビグラム頻度の対象外として個別に維持する
+                                    if (label.length == 1 && label[0].isLetter()) contextWeight *= 2.0f
+                                } else if (label.length == 1) {
+                                    // 🌟 数学コーパスの実測ローマ字ビグラム頻度による倍率。
+                                    // 観測が無い組み合わせは無調整(1.0倍)のまま。
+                                    val multiplier = keyWeightData.bigramMultiplier[state.lastChar]?.get(label[0])
+                                    if (multiplier != null) contextWeight *= multiplier
                                 }
                             } else if (label in VOWELS) {
                                 contextWeight *= 1.2f
