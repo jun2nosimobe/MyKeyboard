@@ -156,6 +156,8 @@ class KeyboardController(
     private fun handleBackspace() {
         if (state.composingText.isNotEmpty()) {
             val newRomaji = composer.computeBackspace(state.composingText, state.isDirectRomajiMode)
+            // 🌟 全部消してcomposingTextが空になる時もキャッシュをリセット（次の単語に古いDPを持ち越さない）
+            if (newRomaji.isEmpty()) viterbiConverter.resetCache()
             state = state.copy(
                 composingText = newRomaji,
                 isDirectRomajiMode = if (newRomaji.isEmpty()) false else state.isDirectRomajiMode,
@@ -188,6 +190,9 @@ class KeyboardController(
         }
 
         currentInputConnection?.commitText(candidate, 1)
+        // 🌟 確定したのでViterbiの差分探索キャッシュ（前回入力の名残）をリセットする。
+        // これを忘れると次の単語の変換時に古いDPが再利用され、BOSノードが重複増殖してしまう。
+        viterbiConverter.resetCache()
         state = state.copy(
             composingText = "",
             isDirectRomajiMode = false,
@@ -228,6 +233,8 @@ class KeyboardController(
         }
 
         currentInputConnection?.commitText(if (appendSpace) "$textToCommit " else textToCommit, 1)
+        // 🌟 こちらも確定操作なのでキャッシュをリセット（handleCandidateSelectedと同様の理由）
+        viterbiConverter.resetCache()
         state = state.copy(composingText = "", isDirectRomajiMode = false, lastKeyPressTime = System.currentTimeMillis())
         updateUI()
     }

@@ -63,8 +63,10 @@ class JapaneseConverter(
             }
         }
 
-        // キャッシュが0（初回または完全に違う文字）の場合はBOSをセット
-        if (safeCacheLen == 0) {
+        // 🌟 修正：safeCacheLen==0 は「2文字目」や「たまたま1文字目が一致」でも毎回成立するため、
+        // 旧コードのままだと dp[0]（cachedDpと共有参照）に重複BOSが際限なく積み上がってしまう。
+        // dp[0] が本当に空（初回、またはresetCache直後）の時だけBOSを追加する。
+        if (dp[0].isEmpty()) {
             dp[0].add(ViterbiPath("BOS", 0, 0, 0, null)) // startIndex = 0
         }
 
