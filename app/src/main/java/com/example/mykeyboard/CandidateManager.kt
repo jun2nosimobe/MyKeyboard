@@ -95,12 +95,16 @@ class CandidateManager(
             if (trailingRomaji.isNotEmpty()) hiraganaStr.dropLast(trailingRomaji.length) else hiraganaStr
 
         // 🌟 Viterbiの結果を Pair にする (Viterbiの読みは、渡した cleanHiragana そのもの！)
+        // trailingRomaji (保留中の子音) がある時は Viterbi 自身にそれを渡し、辞書側の
+        // 文字クラスGLOBで正しく予測変換させる。以前は Viterbi の結果に生の romaji 文字
+        // をそのまま連結していたため「局所t」のような文字化けした候補が出ていた。
         val viterbiResults = if (cleanHiragana.isNotEmpty()) viterbiConverter.convert(
             cleanHiragana,
+            trailingRomaji = trailingRomaji,
             limit = 10
         ) else emptyList()
         val viterbiCandidates = viterbiResults.map {
-            Pair(it + trailingRomaji, cleanHiragana + trailingRomaji)
+            Pair(it, cleanHiragana + trailingRomaji)
         }
 
         val prevRid = state.lastConfirmedWord.takeIf { it.isNotEmpty() }?.let {

@@ -237,11 +237,20 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         return null
     }
 
-    fun getPrefixMatchesForViterbi(hiraganaPrefix: String): List<DictEntry> {
+    // 🌟 trailingRomaji: まだ母音が確定していない子音1文字（"きょくしょ" + "t" の "t" 等）。
+    // 指定があれば getGlobPrefixes と同じ文字クラスGLOBで絞り込み、まだ入力されていない
+    // 母音違いの可能性も含めて予測変換する（例: "きょくしょ"+"t" →「局所体」等）。
+    // これにより CandidateManager 側で生の romaji 文字を変換結果の末尾に
+    // そのまま連結する（"局所t" のような文字化けした候補になる）必要が無くなる。
+    fun getPrefixMatchesForViterbi(hiraganaPrefix: String, trailingRomaji: String = ""): List<DictEntry> {
         val list = mutableListOf<DictEntry>()
+        val prefixes = getGlobPrefixes(hiraganaPrefix, trailingRomaji)
+        val whereClause = prefixes.joinToString(" OR ") { "yomi GLOB ?" }
+        val expectedMinLen = hiraganaPrefix.length + (if (trailingRomaji.isNotEmpty()) 1 else 0)
+
         readableDatabase.rawQuery(
-            "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE yomi GLOB ? ORDER BY weight ASC LIMIT 50",
-            arrayOf("$hiraganaPrefix*")
+            "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE $whereClause ORDER BY weight ASC LIMIT 50",
+            prefixes.toTypedArray()
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val word = cursor.getString(0)
@@ -250,7 +259,7 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
                 val lid = cursor.getInt(3)
                 val rid = cursor.getInt(4)
 
-                val missingCharCount = yomi.length - hiraganaPrefix.length
+                val missingCharCount = kotlin.math.max(0, yomi.length - expectedMinLen)
                 val predictionPenalty = missingCharCount * 150
                 list.add(DictEntry(word, yomi, baseWeight + predictionPenalty, lid, rid))
             }

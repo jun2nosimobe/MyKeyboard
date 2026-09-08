@@ -33,7 +33,10 @@ class JapaneseConverter(
         queryCache.clear()
     }
 
-    fun convert(hiragana: String, limit: Int = 5): List<String> {
+    // 🌟 trailingRomaji: まだ母音が確定していない末尾の子音1文字。指定時は最後の
+    // 位置(j==len)の辞書検索がこの文字も加味した予測変換になる（詳細は
+    // DictionaryDatabaseHelper.getPrefixMatchesForViterbi 参照）。
+    fun convert(hiragana: String, trailingRomaji: String = "", limit: Int = 5): List<String> {
         if (hiragana.isEmpty()) {
             resetCache()
             return emptyList()
@@ -86,8 +89,11 @@ class JapaneseConverter(
                 val sub = hiragana.substring(i, j)
 
                 var dictMatches = if (j == len) {
-                    queryCache.getOrPut("PREFIX_$sub") {
-                        db.getPrefixMatchesForViterbi(sub)
+                    // 🌟 trailingRomaji が変わると同じ sub でも検索結果が変わるので
+                    // キャッシュキーに含める（含めないと保留中の子音を変えた時に
+                    // 古い候補が返ってしまう）。
+                    queryCache.getOrPut("PREFIX_${trailingRomaji}_$sub") {
+                        db.getPrefixMatchesForViterbi(sub, trailingRomaji)
                     }
                 } else {
                     queryCache.getOrPut(sub) {
