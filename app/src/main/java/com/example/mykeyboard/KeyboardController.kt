@@ -41,6 +41,46 @@ class KeyboardController(
     private val candidateScroll: HorizontalScrollView? = keyboardView.findViewById(R.id.candidate_scroll)
     private val candidateLayout: LinearLayout? = keyboardView.findViewById(R.id.candidate_layout)
 
+    // 🌟 フリック入力: ローマ字QWERTY配列と12キーフリック配列は同じ場所に重ねて
+    // 配置してあり、設定(useFlickInput)とモードに応じてどちらか一方だけを表示する。
+    private val qwertyRowsContainer: View? = keyboardView.findViewById(R.id.qwerty_rows_container)
+    private val flickRowsContainer: View? = keyboardView.findViewById(R.id.flick_rows_container)
+
+    // 🌟 「入力中のまま別画面に飛んだ時にキャッシュを消す」への対応。
+    // MathKeyboardService.onStartInputViewから、入力欄/アプリが切り替わるたびに
+    // 呼ばれる。前の入力欄向けのcomposingText等がここでクリアされないと、
+    // 全く関係のない次の入力欄に古い未確定テキストの記憶が残ってしまう。
+    // 🌟 新しい入力コネクションには一切触れない: まだ何も打っていないフィールドに
+    // commitText等を送ると余計な文字が挿入されてしまうため。
+    fun resetForNewInputSession() {
+        if (state.composingText.isEmpty() && state.lastConfirmedWord.isEmpty()) return
+        state = state.copy(composingText = "", isDirectRomajiMode = false, lastConfirmedWord = "")
+        viterbiConverter.resetCache()
+        updateCandidateView(emptyList())
+        stateFlow.value = state
+    }
+
+    private fun isFlickModeActive(): Boolean {
+        if (state.currentMode != MathKeyboardService.InputMode.JAPANESE) return false
+        val prefs = context.getSharedPreferences("KeyboardSettings", android.content.Context.MODE_PRIVATE)
+        return prefs.getBoolean("useFlickInput", false)
+    }
+
+    private fun updateKeyboardLayoutVisibility() {
+        val flick = isFlickModeActive()
+        flickRowsContainer?.visibility = if (flick) View.VISIBLE else View.GONE
+        qwertyRowsContainer?.visibility = if (flick) View.GONE else View.VISIBLE
+        // 🌟 フリックグリッド側に space/enter/記号一覧が揃っているので、共通の
+        // 最下段(mode/,/Space/./Enter)はフリックモード中は不要になる
+        keyboardView.findViewById<View>(R.id.shared_bottom_row)?.visibility = if (flick) View.GONE else View.VISIBLE
+        if (!flick) {
+            // 🌟 数字グリッドを表示したまま他モードへ抜けた場合に備え、次に
+            // フリックモードへ戻った時は必ずかなグリッドから始まるようにする
+            keyboardView.findViewById<View>(R.id.flick_number_grid)?.visibility = View.GONE
+            keyboardView.findViewById<View>(R.id.flick_kana_grid)?.visibility = View.VISIBLE
+        }
+    }
+
     // 🌟 非同期処理 (Flow/Coroutines)
     private val controllerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val stateFlow = MutableStateFlow(state)
@@ -151,6 +191,8 @@ class KeyboardController(
             is KeyboardEvent.CandidateSelected -> handleCandidateSelected(event.text)
             is KeyboardEvent.ModeChanged -> handleModeChanged(event.mode, event.isOneShot)
             is KeyboardEvent.ShiftToggled -> handleShiftToggled()
+            is KeyboardEvent.FlickInput -> handleFlickInput(event.hiragana)
+            is KeyboardEvent.DakutenCycleTapped -> handleDakutenCycle()
         }
     }
 
@@ -190,6 +232,33 @@ class KeyboardController(
         } else {
             commitDirectText(textToInput)
         }
+    }
+
+    // ==========================================
+    // 🌟 フリック入力: composingTextにひらがなを直接追記する。
+    // Composer.convertRomajiToHiragana はASCII以外の文字をそのまま素通しするので
+    // (Trieが128以上のcode pointで即break→未一致の文字はそのままappend)、
+    // ローマ字用のcomposingTextパイプラインに一切手を加えずに共存できる。
+    // ==========================================
+    private fun handleFlickInput(hiragana: String) {
+        if (hiragana.isEmpty()) return
+        state = state.copy(
+            composingText = state.composingText + hiragana,
+            lastKeyPressTime = System.currentTimeMillis()
+        )
+        updateUI()
+    }
+
+    // 🌟 フリック入力の「゛゜」キー: 直前の1文字を濁点/半濁点/小文字サイクルで巡回させる
+    private fun handleDakutenCycle() {
+        if (state.composingText.isEmpty()) return
+        val last = state.composingText.last()
+        val next = FlickKeyDatabase.dakutenCycle[last] ?: return
+        state = state.copy(
+            composingText = state.composingText.dropLast(1) + next,
+            lastKeyPressTime = System.currentTimeMillis()
+        )
+        updateUI()
     }
 
     private fun handleBackspace() {
@@ -278,6 +347,20 @@ class KeyboardController(
         updateUI()
     }
 
+    // 🌟 「、。が確定を兼ねているのをやめたい」への対応。
+    // 句読点は本来「確定」とは無関係な1文字の入力に過ぎないのに、これまでは
+    // commitDirectText経由で必ずforceCommitComposingText(未変換のひらがな確定)を
+    // 挟んでいた。composing中の時は、確定ではなく単純にcomposingバッファへ追記する
+    // (handleFlickInputと同じ扱い)ことで、変換候補を選ぶ機会を奪わないようにする。
+    // composingが無い(何も入力中でない)時だけ、これまで通り即時に確定入力する。
+    private fun handlePunctuationTapped(text: String) {
+        if (state.composingText.isEmpty()) {
+            commitDirectText(text)
+        } else {
+            handleFlickInput(text)
+        }
+    }
+
     private fun commitDirectText(text: String) {
         forceCommitComposingText(appendSpace = false)
         TextProcessor.commitTextWithNormalization(currentInputConnection, text)
@@ -315,6 +398,7 @@ class KeyboardController(
             currentMode = mode,
             isOneShotMode = isOneShot
         )
+        updateKeyboardLayoutVisibility()
         requestUpdateLabels()
     }
 
@@ -336,7 +420,17 @@ class KeyboardController(
     private fun updateUI() {
         // プレビュー表示 (即時)
         if (state.composingText.isEmpty()) {
-            currentInputConnection?.commitText("", 1)
+            // 🌟 性能改善のため、一時 finishComposingText() に変えたが、これは誤りだった:
+            // finishComposingText() は「現在composing中の文字列をそのまま確定する」だけで
+            // 中身を空にはしない。バックスペースで最後の1文字を消してcomposingTextが
+            // 空になった時、相手アプリの画面にはまだ直前のsetComposingText(1文字前)の
+            // 表示が残ったままなので、finishComposingText()を呼ぶとその「消したはずの
+            // 1文字」がそのまま(未変換の生かなで)確定されてしまっていた
+            // (「一文字だけに対してバックスペースを打つとおかしい」の原因)。
+            // setComposingText("", 1) は commitText("", 1) の前半(表示を空にする部分)
+            // だけを行う軽量な呼び出しで、どんな状態からでも正しく composing 表示を
+            // 空にできる。
+            currentInputConnection?.setComposingText("", 1)
         } else {
             // 🌟 修正: JAPANESEモード以外（NORMAL等）なら、勝手にひらがな化せずそのまま表示する！
             val previewText = if (state.isDirectRomajiMode || state.currentMode != MathKeyboardService.InputMode.JAPANESE) {
@@ -348,6 +442,27 @@ class KeyboardController(
         }
         // 重い変換処理はFlowに投げてdebounceさせる
         stateFlow.value = state
+    }
+
+    // 🌟 「.,()など全角半角間違いやすいキーを追加したので、候補欄で右下に小さく
+    // (半)/(全)と表す」への対応。全角⇄半角のペアを持つ記号候補にだけ、小さく
+    // ラベルを付ける。既存の1文字TextViewのレイアウトを崩さないよう、
+    // SpannableStringで文字本体の右下に小さく追記する形にした。
+    private val halfWidthToFull = mapOf(
+        '.' to '．', ',' to '，', '(' to '（', ')' to '）', '!' to '！', '?' to '？',
+        '/' to '／', '+' to '＋', '-' to '－', '*' to '＊', '=' to '＝', '<' to '＜',
+        '>' to '＞', ':' to '：', ';' to '；', '[' to '［', ']' to '］', '{' to '｛',
+        '}' to '｝', '|' to '｜', '~' to '～', '#' to '＃', '$' to '＄', '\\' to '＼',
+        '\'' to '’', '"' to '”', '@' to '＠', '%' to '％', '^' to '＾', '_' to '＿'
+    )
+    private val fullWidthToHalf = halfWidthToFull.entries.associate { (h, f) -> f to h }
+
+    private fun widthBadgeSuffix(word: String): String? {
+        if (word.length != 1) return null
+        val c = word[0]
+        if (halfWidthToFull.containsKey(c)) return " (半)"
+        if (fullWidthToHalf.containsKey(c)) return " (全)"
+        return null
     }
 
     private fun updateCandidateView(candidates: List<Pair<String, String>>) {
@@ -371,7 +486,24 @@ class KeyboardController(
                     }
                     candidateLayout?.addView(tv)
                 }
-                tv.text = word; tv.visibility = View.VISIBLE
+                val badge = widthBadgeSuffix(word)
+                if (badge != null) {
+                    val spannable = android.text.SpannableString(word + badge)
+                    spannable.setSpan(
+                        android.text.style.RelativeSizeSpan(0.55f),
+                        word.length, spannable.length,
+                        android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    spannable.setSpan(
+                        android.text.style.ForegroundColorSpan(Color.GRAY),
+                        word.length, spannable.length,
+                        android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    tv.text = spannable
+                } else {
+                    tv.text = word
+                }
+                tv.visibility = View.VISIBLE
                 tv.setOnClickListener { dispatch(KeyboardEvent.CandidateSelected(word)) }
             } else {
                 candidateLayout?.getChildAt(i)?.visibility = View.GONE
@@ -442,6 +574,17 @@ class KeyboardController(
         // 🌟 動的タッチルーター本体
         val keyboardKeysLayout = keyboardView.findViewById<LinearLayout>(R.id.keyboard_keys)
         keyboardKeysLayout.setOnTouchListener { _, event ->
+            // 🌟 重要: このルーターは qwerty_rows_container の「子ボタンをすべて
+            // isClickable=false にして、親(keyboard_keys)側で一括処理する」設計に
+            // 依存している。フリックのボタンは isClickable=true で自前のリスナーを
+            // 持つので通常はここまで来ないはずだが、ボタンとボタンの隙間(余白)を
+            // タップした場合は子が誰も消費せずこのリスナーまで届いてしまい、
+            // 表示上は存在しないはずのQWERTYキー(古いキャッシュ座標)へ誤って
+            // ローマ字が1文字入力される事故が起きていた
+            // (例:「ひ」を打った直後に隙間を触ると"d"が紛れ込む)。
+            // フリックモード中はこのルーター自体を完全に無効化する。
+            if (isFlickModeActive()) return@setOnTouchListener false
+
             if (!isCacheInitialized) {
                 val parentLoc = IntArray(2)
                 keyboardKeysLayout.getLocationOnScreen(parentLoc)
@@ -595,5 +738,232 @@ class KeyboardController(
             onFlick = {},
             getRippleResource = { rippleResId }
         ))
+
+        setupFlickKeyboard(rippleResId)
+        updateKeyboardLayoutVisibility()
+    }
+
+    // ==========================================
+    // 🌟 フリック入力用12キーのセットアップ
+    // ==========================================
+    private fun setupFlickKeyboard(rippleResId: Int) {
+        // 🌟 TouchEventHandlerは「長押し(200ms)でポップアップを出す」前提の実装で、
+        // ポップアップを返さない(null)場合は指を離してもタップ扱いにならず入力が
+        // 消えてしまう(isLongPress=trueのままonSingleTap/onFlickどちらにも
+        // 分岐しないため)。フリックキーは長押しポップアップ自体が不要なので、
+        // タップ/フリックの判定だけを行う専用の軽量リスナーを使う。
+        val flickThreshold = 40f
+        fun wireFlickKey(button: TextView?, data: FlickKeyData, onResolved: (String) -> Unit) {
+            button ?: return
+            var startX = 0f
+            var startY = 0f
+            button.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { v.isPressed = true; startX = event.x; startY = event.y; true }
+                    MotionEvent.ACTION_UP -> {
+                        v.isPressed = false
+                        val dx = event.x - startX
+                        val dy = event.y - startY
+                        val direction = when {
+                            Math.abs(dx) < flickThreshold && Math.abs(dy) < flickThreshold -> null
+                            Math.abs(dx) > Math.abs(dy) -> if (dx > 0) TouchEventHandler.FlickDirection.RIGHT else TouchEventHandler.FlickDirection.LEFT
+                            else -> if (dy > 0) TouchEventHandler.FlickDirection.DOWN else TouchEventHandler.FlickDirection.UP
+                        }
+                        onResolved(direction?.let { data.forDirection(it) } ?: data.center)
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> { v.isPressed = false; true }
+                    else -> true
+                }
+            }
+        }
+
+        // 🌟 フリックの削除キーもQWERTY側のbtn_deleteと同じ「長押しリピート」を持たせる。
+        // ACTION_DOWNで即1文字削除+400ms後からdeleteRunnableで50ms間隔リピート、
+        // ACTION_UP/CANCELで停止。単純なClickListenerだと長押し連続削除ができない。
+        // 🌟 さらに「左フリックで。、.,スペースまで一括削除」を追加。ACTION_MOVEで
+        // 左方向の移動を検知したら、それまでの1文字削除/リピートを打ち切り、
+        // 直近の区切り文字まで一括削除する。
+        fun wireDeleteKey(button: TextView?) {
+            button ?: return
+            var startX = 0f
+            var startY = 0f
+            var didBulkDelete = false
+            button.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        isDeleting = true; v.isPressed = true
+                        startX = event.x; startY = event.y
+                        didBulkDelete = false
+                        dispatch(KeyboardEvent.BackspaceTapped)
+                        deleteHandler.postDelayed(deleteRunnable, 400)
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.x - startX
+                        val dy = event.y - startY
+                        if (!didBulkDelete && -dx > flickThreshold && Math.abs(dx) > Math.abs(dy)) {
+                            didBulkDelete = true
+                            isDeleting = false
+                            deleteHandler.removeCallbacks(deleteRunnable)
+                            deleteToNearestBoundary()
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        isDeleting = false; v.isPressed = false
+                        deleteHandler.removeCallbacks(deleteRunnable)
+                        true
+                    }
+                    else -> true
+                }
+            }
+        }
+
+        // --- かなグリッド (あ〜わ行) ---
+        for ((buttonId, flickData) in FlickKeyDatabase.keys) {
+            wireFlickKey(keyboardView.findViewById(buttonId), flickData) { dispatch(KeyboardEvent.FlickInput(it)) }
+        }
+
+        // --- 句読点キー (タップ=。、フリックで、/？/！) ---
+        wireFlickKey(keyboardView.findViewById(R.id.flick_punct), FlickKeyDatabase.punctKey) {
+            handlePunctuationTapped(it)
+        }
+
+        keyboardView.findViewById<TextView>(R.id.flick_dakuten)?.setOnClickListener {
+            dispatch(KeyboardEvent.DakutenCycleTapped)
+        }
+        keyboardView.findViewById<TextView>(R.id.flick_space)?.setOnClickListener { dispatch(KeyboardEvent.SpaceTapped) }
+        keyboardView.findViewById<TextView>(R.id.flick_enter)?.setOnClickListener { dispatch(KeyboardEvent.EnterTapped) }
+        wireDeleteKey(keyboardView.findViewById(R.id.flick_delete))
+
+        // --- カーソル移動 (composing中の文字は確定してから移動する) ---
+        keyboardView.findViewById<TextView>(R.id.flick_cursor_left)?.setOnClickListener { moveCursor(forward = false) }
+        keyboardView.findViewById<TextView>(R.id.flick_cursor_right)?.setOnClickListener { moveCursor(forward = true) }
+
+        // --- 記号一覧 (「記号ボタンを押したら直接記号がダーッと出てほしい」に対応した
+        // 専用ポップアップ。カテゴリ選択を挟まず、最初から記号グリッドが見える) ---
+        val flickSymbols = keyboardView.findViewById<TextView>(R.id.flick_symbols)
+        flickSymbols?.setOnClickListener {
+            PopupManager.createDirectSymbolPopup(
+                context = context,
+                anchorView = flickSymbols,
+                rippleResId = rippleResId,
+                onSymbolSelected = { sym -> dispatch(KeyboardEvent.DirectTextCommitted(sym)) },
+                onBackspaceSelected = { dispatch(KeyboardEvent.BackspaceTapped) },
+                onSpaceSelected = { dispatch(KeyboardEvent.SpaceTapped) }
+            )
+        }
+
+        // --- 英数キー: ローマ字/英語入力(NORMAL)へ切り替え ---
+        keyboardView.findViewById<TextView>(R.id.flick_switch_alpha)?.setOnClickListener {
+            dispatch(KeyboardEvent.ModeChanged(MathKeyboardService.InputMode.NORMAL, isOneShot = false))
+        }
+        keyboardView.findViewById<TextView>(R.id.flick_num_switch_alpha)?.setOnClickListener {
+            dispatch(KeyboardEvent.ModeChanged(MathKeyboardService.InputMode.NORMAL, isOneShot = false))
+        }
+
+        // --- 数字グリッドの切り替え (かな⇄数字)
+        // 🌟 位置をかなグリッドと揃えてある: 「数字」(row3col1)を押すと「戻る」(row3col1)
+        // が同じ位置に来て、指の移動なしにトグルできる。 ---
+        val kanaGrid = keyboardView.findViewById<View>(R.id.flick_kana_grid)
+        val numberGrid = keyboardView.findViewById<View>(R.id.flick_number_grid)
+        keyboardView.findViewById<TextView>(R.id.flick_numbers)?.setOnClickListener {
+            kanaGrid?.visibility = View.GONE
+            numberGrid?.visibility = View.VISIBLE
+        }
+        keyboardView.findViewById<TextView>(R.id.flick_back_to_kana)?.setOnClickListener {
+            numberGrid?.visibility = View.GONE
+            kanaGrid?.visibility = View.VISIBLE
+        }
+
+        // --- 数字グリッドの記号一覧・スペース・句読点・エンター (かなグリッドと同じ挙動) ---
+        val flickNumSymbols = keyboardView.findViewById<TextView>(R.id.flick_num_symbols)
+        flickNumSymbols?.setOnClickListener {
+            PopupManager.createDirectSymbolPopup(
+                context = context,
+                anchorView = flickNumSymbols,
+                rippleResId = rippleResId,
+                onSymbolSelected = { sym -> dispatch(KeyboardEvent.DirectTextCommitted(sym)) },
+                onBackspaceSelected = { dispatch(KeyboardEvent.BackspaceTapped) },
+                onSpaceSelected = { dispatch(KeyboardEvent.SpaceTapped) }
+            )
+        }
+        keyboardView.findViewById<TextView>(R.id.flick_num_space)?.setOnClickListener { dispatch(KeyboardEvent.SpaceTapped) }
+        keyboardView.findViewById<TextView>(R.id.flick_num_enter)?.setOnClickListener { dispatch(KeyboardEvent.EnterTapped) }
+        // 🌟 「・」は濁点キーの代わりの位置にある単純な直接入力キー(数字モードでは濁点切替は不要)
+        keyboardView.findViewById<TextView>(R.id.flick_num_dot)?.setOnClickListener {
+            dispatch(KeyboardEvent.DirectTextCommitted("・"))
+        }
+        // --- 数字モードの句読点キー (半角 .,?!) ---
+        wireFlickKey(keyboardView.findViewById(R.id.flick_num_punct), FlickKeyDatabase.numPunctKey) {
+            handlePunctuationTapped(it)
+        }
+
+        // --- 数字グリッドの各キー (タップ=数字、フリックで演算子) ---
+        for ((buttonId, flickData) in FlickKeyDatabase.numberKeys) {
+            wireFlickKey(keyboardView.findViewById(buttonId), flickData) { dispatch(KeyboardEvent.DirectTextCommitted(it)) }
+        }
+        wireDeleteKey(keyboardView.findViewById(R.id.flick_num_delete))
+        keyboardView.findViewById<TextView>(R.id.flick_num_cursor_left)?.setOnClickListener { moveCursor(forward = false) }
+        keyboardView.findViewById<TextView>(R.id.flick_num_cursor_right)?.setOnClickListener { moveCursor(forward = true) }
+    }
+
+    // 🌟 確定済みテキスト上でカーソルを1文字分移動する。composing中の文字がある場合は
+    // 先に確定してから移動する(未確定文字を跨いだカーソル移動は挙動が不定なため)。
+    private fun moveCursor(forward: Boolean) {
+        // 🌟 修正: 「方向キーで勝手に無変換確定してカーソル移動どころか入力欄から
+        // 消える」バグへの対応。forceCommitComposingText()は内部でupdateUI()を呼び、
+        // composingTextが空になった直後にさらにsetComposingText("", 1)を発行していた。
+        // commitText()は仕様上すでにcomposing領域を確定済みなので、その直後に
+        // もう一度composing操作(setComposingText)を発行し、さらに間髪入れずDPADの
+        // sendKeyEventを送るという3連続のIPCが、相手アプリ側のカーソル/composing状態と
+        // 競合し、テキストが消える不具合につながっていた可能性が高い。
+        // ここではcommitTextだけを行い、composing操作の再発行を挟まずに直接DPADへ進む。
+        if (state.composingText.isNotEmpty()) {
+            val textToCommit = if (state.isDirectRomajiMode || state.currentMode != MathKeyboardService.InputMode.JAPANESE) {
+                state.composingText
+            } else {
+                composer.convertRomajiToHiragana(state.composingText)
+            }
+            currentInputConnection?.commitText(textToCommit, 1)
+            viterbiConverter.resetCache()
+            state = state.copy(composingText = "", isDirectRomajiMode = false, lastKeyPressTime = System.currentTimeMillis())
+            // 🌟 入力コネクションへの再操作はせず、候補バーのクリア等の内部状態だけ更新する
+            stateFlow.value = state
+        }
+        val keyCode = if (forward) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT
+        currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+    }
+
+    // 🌟 「バックスペース左フリックで。、.,スペースまで一括削除」への対応。
+    // composing中の文字がある場合は、その未確定バッファ全体を1つの塊として消す
+    // (境界文字探索は既に確定済みのテキストにのみ意味があるため)。
+    // 確定済みテキストの場合は、カーソル直前から直近の区切り文字の手前まで削除する。
+    // カーソル直前がすでに区切り文字自体の場合は、まずそれを1つ消してから
+    // (区切り文字の連打で1文字ずつしか消えないのを防ぐ)、次の区切りを探す。
+    private fun deleteToNearestBoundary() {
+        if (state.composingText.isNotEmpty()) {
+            state = state.copy(composingText = "", isDirectRomajiMode = false, lastKeyPressTime = System.currentTimeMillis())
+            viterbiConverter.resetCache()
+            updateUI()
+            return
+        }
+        val boundaryChars = setOf('。', '、', '.', ',', ' ', '\n')
+        val before = currentInputConnection?.getTextBeforeCursor(50, 0)?.toString() ?: return
+        if (before.isEmpty()) return
+
+        var deleteCount = 0
+        var i = before.length - 1
+        if (before[i] in boundaryChars) {
+            deleteCount++
+            i--
+        }
+        while (i >= 0 && before[i] !in boundaryChars) {
+            deleteCount++
+            i--
+        }
+        if (deleteCount > 0) currentInputConnection?.deleteSurroundingText(deleteCount, 0)
     }
 }

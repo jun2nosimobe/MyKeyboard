@@ -86,6 +86,7 @@ fun UnifiedSettingsScreen(
     var bgAlpha by remember { mutableStateOf(prefs.getFloat("bgAlpha", 0.4f)) }
     var bgColorPacked by remember { mutableStateOf(prefs.getInt("bgColorPacked", AndroidColor.parseColor("#ECECEC"))) }
     var enableLearningBeta by remember { mutableStateOf(prefs.getBoolean("enableLearningBeta", false)) }
+    var useFlickInput by remember { mutableStateOf(prefs.getBoolean("useFlickInput", false)) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -367,6 +368,28 @@ fun UnifiedSettingsScreen(
                         onCheckedChange = { isChecked ->
                             enableLearningBeta = isChecked
                             prefs.edit().putBoolean("enableLearningBeta", isChecked).apply()
+                        }
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text("フリック入力 (日本語)", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "日本語入力をローマ字入力の代わりに12キーのフリック入力にします。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    Switch(
+                        checked = useFlickInput,
+                        onCheckedChange = { isChecked ->
+                            useFlickInput = isChecked
+                            prefs.edit().putBoolean("useFlickInput", isChecked).apply()
                         }
                     )
                 }

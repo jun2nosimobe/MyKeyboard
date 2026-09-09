@@ -55,7 +55,19 @@ class KeyboardThemeManager(context: Context) {
     // すべてのキーの文字色を更新
     fun updateAllTextColors(keyboardView: View) {
         val controlKeys = listOf(R.id.btn_shift, R.id.btn_space, R.id.btn_delete, R.id.btn_enter, R.id.btn_mode, R.id.btn_comma, R.id.btn_period)
-        (KeyDatabase.keys.keys + controlKeys).forEach { id ->
+        // 🌟 フリック入力用キーもここに含めないと、テーマ(文字色)が一切反映されず
+        // 常にXML上のデフォルト色(黒)のままになってしまう。
+        val flickControlKeys = listOf(
+            R.id.flick_symbols, R.id.flick_delete, R.id.flick_cursor_left, R.id.flick_cursor_right,
+            R.id.flick_numbers, R.id.flick_space, R.id.flick_dakuten, R.id.flick_punct, R.id.flick_enter,
+            R.id.flick_switch_alpha, R.id.flick_back_to_kana, R.id.flick_num_delete,
+            R.id.flick_num_cursor_left, R.id.flick_num_cursor_right, R.id.flick_num_dot,
+            R.id.flick_num0, R.id.flick_num1, R.id.flick_num2, R.id.flick_num3, R.id.flick_num4,
+            R.id.flick_num5, R.id.flick_num6, R.id.flick_num7, R.id.flick_num8, R.id.flick_num9,
+            R.id.flick_num_symbols, R.id.flick_num_space, R.id.flick_num_switch_alpha,
+            R.id.flick_num_punct, R.id.flick_num_enter
+        )
+        (KeyDatabase.keys.keys + controlKeys + FlickKeyDatabase.keys.keys + flickControlKeys).forEach { id ->
             keyboardView.findViewById<TextView>(id)?.setTextColor(keyTextColor)
         }
     }

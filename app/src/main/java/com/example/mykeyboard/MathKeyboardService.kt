@@ -77,6 +77,11 @@ class MathKeyboardService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
 
+        // 🌟 「入力中のまま別画面に飛んだ時にキャッシュを消す」への対応。
+        // 別の入力欄・別のアプリに切り替わった(=新しい入力セッションが始まった)時は、
+        // 前の入力欄向けのcomposingText等の内部状態を必ずリセットする。
+        controller.resetForNewInputSession()
+
         // 接続先が切り替わる可能性があるため、常に最新のコネクションをControllerに更新
         controller.currentInputConnection = currentInputConnection
 

@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
@@ -279,5 +280,152 @@ object PopupManager {
         val result = popupWindow to emptyList<Pair<View, String>>()
         cachedModePopup = result
         return result
+    }
+
+    // ==========================================
+    // 🌟 フリック用「記号」ボタン専用のポップアップ。
+    // 「記号ボタンを押したら直接記号がダーッと出てほしい」への対応。
+    // createModeKeyPopup(モード切替+カテゴリ選択の2段階ナビゲーション)とは違い、
+    // 最初からカテゴリタブ+記号グリッドを同時に表示し、1タップで記号を選べる。
+    // 「絵文字」もKeyDatabase.extraSymbolsの1カテゴリとして同じ導線で選べる。
+    // ==========================================
+    private var cachedSymbolPopup: PopupWindow? = null
+
+    fun invalidateSymbolPopupCache() {
+        cachedSymbolPopup = null
+    }
+
+    fun createDirectSymbolPopup(
+        context: Context,
+        anchorView: View,
+        rippleResId: Int,
+        onSymbolSelected: (String) -> Unit,
+        onBackspaceSelected: () -> Unit,
+        onSpaceSelected: () -> Unit
+    ) {
+        cachedSymbolPopup?.let {
+            showAboveAnchor(it, anchorView)
+            return
+        }
+
+        val screenWidth = getScreenWidth(context)
+        // 🌟 描画位置の改善: ボタンの真上ではなく画面幅に対して中央寄りに大きく表示し、
+        // 狭い画面でも記号が小さくなりすぎないようにする。
+        val popupWidth = min(920, screenWidth - 48)
+
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFFEEEEEE.toInt())
+            setPadding(12, 12, 12, 12)
+        }
+
+        val gridScroll = ScrollView(context)
+        val gridLayout = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        gridScroll.addView(gridLayout)
+
+        fun renderCategory(symbols: List<String>) {
+            gridLayout.removeAllViews()
+            val cellWidth = (popupWidth - 24) / 6
+            symbols.chunked(6).forEach { row ->
+                gridLayout.addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    row.forEach { sym ->
+                        addView(TextView(context).apply {
+                            text = sym; textSize = 22f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
+                            setBackgroundResource(rippleResId)
+                            layoutParams = LinearLayout.LayoutParams(cellWidth, 130).apply { setMargins(1, 1, 1, 1) }
+                            setOnClickListener { onSymbolSelected(sym) }
+                        })
+                    }
+                })
+            }
+        }
+
+        // --- カテゴリタブ (常に表示、押したらその場でグリッドが切り替わる) ---
+        val tabScroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false }
+        val tabLayout = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        val tabViews = mutableListOf<TextView>()
+        KeyDatabase.extraSymbols.entries.forEachIndexed { index, (category, symbols) ->
+            val tab = TextView(context).apply {
+                text = category; textSize = 13f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
+                setBackgroundResource(rippleResId)
+                layoutParams = LinearLayout.LayoutParams(180, 110).apply { setMargins(4, 0, 4, 8) }
+                setOnClickListener {
+                    tabViews.forEach { it.setBackgroundColor(Color.TRANSPARENT) }
+                    setBackgroundColor(0xFFBBDEFB.toInt())
+                    renderCategory(symbols)
+                }
+            }
+            tabViews.add(tab)
+            tabLayout.addView(tab)
+            if (index == 0) {
+                tab.setBackgroundColor(0xFFBBDEFB.toInt())
+                renderCategory(symbols)
+            }
+        }
+        tabScroll.addView(tabLayout)
+
+        // --- 上部の共通コントロール (Space/⌫) ---
+        val controlRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 110).apply { setMargins(0, 0, 0, 8) }
+            addView(TextView(context).apply {
+                text = "Space"; textSize = 14f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
+                setBackgroundColor(0xFFE0E0E0.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, 4, 0) }
+                setOnClickListener { onSpaceSelected() }
+            })
+            addView(TextView(context).apply {
+                text = "⌫"; textSize = 18f; setTextColor(Color.BLACK); gravity = Gravity.CENTER
+                setBackgroundColor(0xFFE0E0E0.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, -1, 1f)
+                setOnClickListener { onBackspaceSelected() }
+            })
+        }
+
+        root.addView(controlRow)
+        root.addView(tabScroll)
+        root.addView(gridScroll)
+
+        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val displayMetrics = DisplayMetrics()
+        windowManager.defaultDisplay.getMetrics(displayMetrics)
+        val buttonY = getViewScreenLocationY(anchorView)
+        val popupHeight = min(1100, max(400, buttonY - 80))
+        gridScroll.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, popupHeight - 260)
+
+        val popupWindow = PopupWindow(root, popupWidth, popupHeight, true).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            elevation = 20f
+            isFocusable = true
+            isOutsideTouchable = true
+        }
+        cachedSymbolPopup = popupWindow
+        showAboveAnchor(popupWindow, anchorView)
+    }
+
+    // 🌟 描画位置の改善: ボタン直上に、かつ画面幅の中央寄りに配置する。
+    // 単純にshowAsDropDown(anchorView, 0, yOffset)だけだと、画面の端に近いキーの上では
+    // ポップアップが画面外にはみ出すことがあったため、水平位置は画面中央基準で
+    // クランプし、垂直位置はアンカーの上に確実に収まるようにしている。
+    private fun showAboveAnchor(popupWindow: PopupWindow, anchorView: View) {
+        val context = anchorView.context
+        val screenWidth = getScreenWidth(context)
+        val popupWidth = popupWindow.width
+        val location = IntArray(2)
+        anchorView.getLocationOnScreen(location)
+        val anchorScreenX = location[0]
+        val anchorScreenY = location[1]
+
+        val desiredScreenX = (screenWidth - popupWidth) / 2
+        val xOffset = desiredScreenX - anchorScreenX
+
+        val popupHeight = popupWindow.height
+        var yOffset = -anchorView.height - popupHeight - 20
+        if (anchorScreenY + yOffset < 0) {
+            yOffset = -anchorScreenY + 20
+        }
+
+        popupWindow.showAsDropDown(anchorView, xOffset, yOffset)
     }
 }

@@ -47,6 +47,11 @@
             android:padding="4dp">
 
             <LinearLayout
+                android:id="@+id/qwerty_rows_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
@@ -127,8 +132,95 @@
                 <TextView android:id="@+id/btn_m" android:layout_width="0dp" android:layout_height="45dp" android:layout_weight="1" android:text="m" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="18sp" android:textColor="#000000" />
                 <TextView android:id="@+id/btn_delete" android:layout_width="0dp" android:layout_height="45dp" android:layout_weight="1.5" android:text="⌫" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
             </LinearLayout>
+            </LinearLayout>
+
+            <!-- 🌟 フリック入力用 5列×4行グリッド（設定でONの時だけ表示、通常はgone） -->
+            <LinearLayout
+                android:id="@+id/flick_rows_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- かな入力グリッド（数字グリッドと排他表示） -->
+                <LinearLayout
+                    android:id="@+id/flick_kana_grid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_symbols" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="記号" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="16sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_a" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="あ" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_ka" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="か" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_sa" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="さ" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_delete" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="⌫" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_cursor_left" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="←" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_ta" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="た" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_na" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="な" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_ha" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="は" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_cursor_right" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="→" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_numbers" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="数字" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="16sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_ma" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="ま" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_ya" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="や" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_ra" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="ら" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_space" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="スペース" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="14sp" android:textColor="#000000" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_switch_alpha" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="英数" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="16sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_dakuten" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="゛゜" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_wa" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="わ" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_punct" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="。、？！" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="13sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_enter" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="↵" android:gravity="center" android:clickable="true" android:background="#66C8E6C9" android:textSize="18sp" android:textColor="#000000" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 数字グリッド（かなグリッドと排他表示、初期状態はgone）
+                     🌟 かなグリッドと列位置を揃えてある: 「数字」があった位置(row3col1)に
+                     「戻る」、「わ」があった位置(row4col3)に「0」、スペースの位置(row3col5)に
+                     スペースを置くことで、モード切替してもボタン位置の記憶がズレないようにした。 -->
+                <LinearLayout
+                    android:id="@+id/flick_number_grid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_num_symbols" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="記号" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="16sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num1" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="1" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num2" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="2" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num3" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="3" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num_delete" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="⌫" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_num_cursor_left" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="←" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num4" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="4" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num5" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="5" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num6" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="6" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num_cursor_right" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="→" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_back_to_kana" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="あ" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num7" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="7" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num8" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="8" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num9" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="9" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num_space" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="Space" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="14sp" android:textColor="#000000" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                        <TextView android:id="@+id/flick_num_switch_alpha" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="英数" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="16sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num_dot" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="・" android:gravity="center" android:clickable="true" android:background="#66E0E0E0" android:textSize="18sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num0" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="0" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="20sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num_punct" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text=".,?!" android:gravity="center" android:clickable="true" android:background="?android:attr/selectableItemBackground" android:textSize="13sp" android:textColor="#000000" />
+                        <TextView android:id="@+id/flick_num_enter" android:layout_width="0dp" android:layout_height="56dp" android:layout_weight="1" android:text="↵" android:gravity="center" android:clickable="true" android:background="#66C8E6C9" android:textSize="18sp" android:textColor="#000000" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/shared_bottom_row"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"

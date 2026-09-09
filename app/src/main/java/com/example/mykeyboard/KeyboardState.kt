@@ -29,4 +29,8 @@ sealed class KeyboardEvent {
     data class CandidateSelected(val text: String) : KeyboardEvent()
     data class ModeChanged(val mode: MathKeyboardService.InputMode, val isOneShot: Boolean = true) : KeyboardEvent()
     object ShiftToggled : KeyboardEvent()
+    // 🌟 フリック入力用: ひらがな1文字(あ〜ん・ー等)をそのまま入力欄に追加する
+    data class FlickInput(val hiragana: String) : KeyboardEvent()
+    // 🌟 フリック入力用: 直前の1文字を濁点/半濁点/小文字サイクルで巡回させる
+    object DakutenCycleTapped : KeyboardEvent()
 }
