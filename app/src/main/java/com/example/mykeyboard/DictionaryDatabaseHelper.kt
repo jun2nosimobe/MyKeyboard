@@ -13,6 +13,17 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         // 🌟 PC側の出力ファイル名に合わせて変更
         private const val DB_NAME = "mydict.db"
         private const val DB_VERSION = 1
+
+        // 🌟 【重要】assets/mydict.db の中身(単語・weight・matrix等)を更新するたびに
+        // このバージョンを+1すること！ これを怠ると、PC側で辞書を再ビルドして
+        // APKに焼き直しても「端末に既にmydict.dbが存在する」という理由だけで
+        // 古いDBがそのまま使われ続けてしまう（実際にこれが原因で、ある回の
+        // セッションで辞書修正が何件も端末に反映されないまま放置される事故が
+        // 発生した）。DB_VERSION(SQLiteOpenHelperのスキーマバージョン)とは別物で、
+        // こちらは「assetsの中身が変わったかどうか」だけを追跡する。
+        private const val ASSET_DICT_VERSION = 5
+        private const val PREFS_NAME = "KeyboardSettings"
+        private const val PREF_KEY_DEPLOYED_VERSION = "deployedDictVersion"
     }
 
     data class DictEntry(val word: String, val yomi: String, val weight: Int, val lid: Int, val rid: Int)
@@ -20,9 +31,16 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
     private val dbFile: File = context.getDatabasePath(DB_NAME)
 
     init {
-        // 初回起動時
-        if (!dbFile.exists()) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val deployedVersion = prefs.getInt(PREF_KEY_DEPLOYED_VERSION, 0)
+        // 🌟 初回起動時、または assets の辞書バージョンが上がっている場合は再配置する。
+        if (!dbFile.exists() || deployedVersion < ASSET_DICT_VERSION) {
+            // 🌟 既存のDB/WAL/SHMを確実に消してから配置し直す(reloadDatabaseと同様の理由)。
+            close()
+            File(dbFile.path + "-wal").delete()
+            File(dbFile.path + "-shm").delete()
             deployFromExternalOrAssets()
+            prefs.edit().putInt(PREF_KEY_DEPLOYED_VERSION, ASSET_DICT_VERSION).apply()
         }
     }
 
@@ -109,6 +127,14 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         super.onOpen(db)
         db?.execSQL("CREATE INDEX IF NOT EXISTS idx_dictionary_yomi ON dictionary(yomi)")
         db?.execSQL("CREATE INDEX IF NOT EXISTS idx_history_yomi ON user_history(yomi)")
+        // 🌟 性能改善: 候補確定のたびに走る「次単語予測」(generateCandidates内)が
+        // getRidForWord(word=?)とgetPredictionsByLids(lid IN (...))を呼ぶが、
+        // word/lid列に索引が無く、確定するたびに辞書全体(約127万行)を
+        // フルスキャンしていた。これが「選択を確定させたときの処理が
+        // 気持ち遅い」の主因。IF NOT EXISTSなので既存ユーザーも次回起動時に
+        // 自動で索引が作られる(DB_VERSIONを上げる必要はない)。
+        db?.execSQL("CREATE INDEX IF NOT EXISTS idx_dictionary_word ON dictionary(word)")
+        db?.execSQL("CREATE INDEX IF NOT EXISTS idx_dictionary_lid ON dictionary(lid)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase?, oldVersion: Int, newVersion: Int) {

@@ -12,13 +12,25 @@ class EnglishDictionaryHelper(private val context: Context) :
     companion object {
         private const val DB_NAME = "eng_dict.db" // 🌟 完全に独立したファイル名
         private const val DB_VERSION = 1
+
+        // 🌟 【重要】assets/eng_dict.db を更新したらこちらも+1すること
+        // (DictionaryDatabaseHelper.ASSET_DICT_VERSIONと同じ理由・同じ仕組み)。
+        private const val ASSET_DICT_VERSION = 2
+        private const val PREFS_NAME = "KeyboardSettings"
+        private const val PREF_KEY_DEPLOYED_VERSION = "deployedEngDictVersion"
     }
 
     private val dbFile: File = context.getDatabasePath(DB_NAME)
 
     init {
-        if (!dbFile.exists()) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val deployedVersion = prefs.getInt(PREF_KEY_DEPLOYED_VERSION, 0)
+        if (!dbFile.exists() || deployedVersion < ASSET_DICT_VERSION) {
+            close()
+            File(dbFile.path + "-wal").delete()
+            File(dbFile.path + "-shm").delete()
             deployFromExternalOrAssets()
+            prefs.edit().putInt(PREF_KEY_DEPLOYED_VERSION, ASSET_DICT_VERSION).apply()
         }
     }
 

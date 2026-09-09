@@ -7,6 +7,17 @@ class CandidateManager(
     private val composer: Composer,
     private val matrix: MatrixManager
 ) {
+    // 🌟 「ひらがな二文字以下は候補から除外」への対応。
+    // 変換候補(辞書完全一致・Viterbi結果)の中に、漢字化されていない生のひらがなが
+    // 1〜2文字だけ混じっていると、意味のある変換候補に紛れて選びにくくなる
+    // (ユーザーが本当にひらがなのまま確定したい場合は、常に末尾に追加される
+    // 「入力そのまま」の候補(hiraganaStr等、下のfallback群)で対応できるので、
+    // このフィルタで除外しても入力の自由度は失われない)。
+    private fun isShortHiraganaNoise(word: String): Boolean {
+        if (word.isEmpty() || word.length > 2) return false
+        return word.all { it in 'ぁ'..'ん' || it == 'ー' }
+    }
+
     // 🌟 修正: 戻り値を List<Pair<String, String>> に変更
     fun generateCandidates(state: KeyboardState): List<Pair<String, String>> {
 
@@ -21,7 +32,7 @@ class CandidateManager(
                 if (prevRid != null) {
                     val bestLids = matrix.getTopConnectingLids(prevRid, limit = 5)
                     val predictions = dbHelper.getPredictionsByLids(bestLids, limit = 15)
-                    finalCandidates.addAll(predictions)
+                    finalCandidates.addAll(predictions.filterNot { isShortHiraganaNoise(it.first) })
                 }
             }
             return finalCandidates
@@ -105,13 +116,13 @@ class CandidateManager(
         ) else emptyList()
         val viterbiCandidates = viterbiResults.map {
             Pair(it, cleanHiragana + trailingRomaji)
-        }
+        }.filterNot { isShortHiraganaNoise(it.first) }
 
         val prevRid = state.lastConfirmedWord.takeIf { it.isNotEmpty() }?.let {
             dbHelper.getRidForWord(it)
         } ?: 0
 
-        val dbCandidates = if (cleanHiragana.isNotEmpty() || trailingRomaji.isNotEmpty()) {
+        val dbCandidates = (if (cleanHiragana.isNotEmpty() || trailingRomaji.isNotEmpty()) {
             dbHelper.getCandidates(
                 hiragana = cleanHiragana,
                 trailingRomaji = trailingRomaji,
@@ -119,7 +130,7 @@ class CandidateManager(
                 matrix = matrix,
                 limit = 10
             )
-        } else emptyList()
+        } else emptyList()).filterNot { isShortHiraganaNoise(it.first) }
 
         // 統合処理 (重複は first で判定)
         if (trailingRomaji.isNotEmpty()) {

@@ -10,6 +10,19 @@ import java.nio.channels.FileChannel
 
 class MatrixManager(private val context: Context) {
 
+    companion object {
+        // 🌟 【重要】assets/matrix.dat を更新するたびに、DictionaryDatabaseHelperの
+        // ASSET_DICT_VERSIONと合わせてこちらも+1すること！ 以前は「外部領域に
+        // ファイルが無い場合のみassetsからコピー」という判定だったため、一度でも
+        // adb push で外部領域に書き込むと、以後は新しいAPK(新しいassets)を
+        // インストールしても永久にそのpush時点のファイルが使われ続けるという
+        // 事故があった(mydict.dbでも同型の事故が発生し、DictionaryDatabaseHelper
+        // 側は既に修正済み)。
+        private const val ASSET_MATRIX_VERSION = 3
+        private const val PREFS_NAME = "KeyboardSettings"
+        private const val PREF_KEY_DEPLOYED_VERSION = "deployedMatrixVersion"
+    }
+
     private val matrixSize = 3000
     private var mappedMatrix: MappedByteBuffer? = null
     private var isLoaded = false
@@ -35,13 +48,17 @@ class MatrixManager(private val context: Context) {
             val dir = externalDir ?: context.filesDir
             val file = File(dir, fileName)
 
-            // 外部領域にファイルが無い場合は、初回のみ assets からコピー
-            if (!file.exists()) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val deployedVersion = prefs.getInt(PREF_KEY_DEPLOYED_VERSION, 0)
+            // 🌟 ファイルが無い場合、または assets 側のバージョンが上がっている場合に再配置する。
+            // (一度配置した後は、開発中の adb push による手動上書きをそのまま尊重する)
+            if (!file.exists() || deployedVersion < ASSET_MATRIX_VERSION) {
                 context.assets.open(fileName).use { input ->
                     FileOutputStream(file).use { output ->
                         input.copyTo(output)
                     }
                 }
+                prefs.edit().putInt(PREF_KEY_DEPLOYED_VERSION, ASSET_MATRIX_VERSION).apply()
             }
 
             RandomAccessFile(file, "r").use { raf ->
