@@ -18,7 +18,7 @@ class MatrixManager(private val context: Context) {
         // インストールしても永久にそのpush時点のファイルが使われ続けるという
         // 事故があった(mydict.dbでも同型の事故が発生し、DictionaryDatabaseHelper
         // 側は既に修正済み)。
-        private const val ASSET_MATRIX_VERSION = 3
+        private const val ASSET_MATRIX_VERSION = 4
         private const val PREFS_NAME = "KeyboardSettings"
         private const val PREF_KEY_DEPLOYED_VERSION = "deployedMatrixVersion"
     }
