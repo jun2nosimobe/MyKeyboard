@@ -21,7 +21,7 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         // セッションで辞書修正が何件も端末に反映されないまま放置される事故が
         // 発生した）。DB_VERSION(SQLiteOpenHelperのスキーマバージョン)とは別物で、
         // こちらは「assetsの中身が変わったかどうか」だけを追跡する。
-        private const val ASSET_DICT_VERSION = 7
+        private const val ASSET_DICT_VERSION = 8
         private const val PREFS_NAME = "KeyboardSettings"
         private const val PREF_KEY_DEPLOYED_VERSION = "deployedDictVersion"
     }
