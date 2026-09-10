@@ -410,22 +410,32 @@ object PopupManager {
     // フリック方向をハイライトする。isTouchable=falseにして、指はあくまで元の
     // キー(アンカー)上のタッチイベントを受け続けられるようにしている。
     // ==========================================
+    private fun roundedDrawable(color: Int, radiusPx: Float) = android.graphics.drawable.GradientDrawable().apply {
+        shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+        cornerRadius = radiusPx
+        setColor(color)
+    }
+
     class FlickPreviewHandle(
         private val popupWindow: PopupWindow,
         private val up: TextView,
         private val down: TextView,
         private val left: TextView,
         private val right: TextView,
-        private val center: TextView
+        private val center: TextView,
+        private val cellRadiusPx: Float
     ) {
-        private val highlightColor = 0xFFBBDEFB.toInt()
+        private val highlightColor = 0xFF90CAF9.toInt()
 
         fun highlight(direction: TouchEventHandler.FlickDirection?) {
-            up.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.UP) highlightColor else Color.TRANSPARENT)
-            down.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.DOWN) highlightColor else Color.TRANSPARENT)
-            left.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.LEFT) highlightColor else Color.TRANSPARENT)
-            right.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.RIGHT) highlightColor else Color.TRANSPARENT)
-            center.setBackgroundColor(if (direction == null || direction == TouchEventHandler.FlickDirection.NONE) highlightColor else Color.TRANSPARENT)
+            fun bg(view: TextView, active: Boolean) {
+                view.background = if (active) PopupManager.roundedDrawable(highlightColor, cellRadiusPx) else null
+            }
+            bg(up, direction == TouchEventHandler.FlickDirection.UP)
+            bg(down, direction == TouchEventHandler.FlickDirection.DOWN)
+            bg(left, direction == TouchEventHandler.FlickDirection.LEFT)
+            bg(right, direction == TouchEventHandler.FlickDirection.RIGHT)
+            bg(center, direction == null || direction == TouchEventHandler.FlickDirection.NONE)
         }
 
         fun dismiss() {
@@ -433,12 +443,15 @@ object PopupManager {
         }
     }
 
+    // 🌟 「プレビューはもう少し小さめに丸みを帯びたウィンドウで」への対応。
+    // セルを一回り小さく、外枠・各セルの背景ともに角丸のGradientDrawableにした。
     fun showFlickPreview(context: Context, anchorView: View, data: FlickKeyData): FlickPreviewHandle {
-        val cell = 110
+        val cell = 68
+        val cellRadius = 14f
         fun cellView(text: String?, bold: Boolean = false): TextView = TextView(context).apply {
             this.text = text ?: ""
-            textSize = 18f
-            setTextColor(Color.BLACK)
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
             gravity = Gravity.CENTER
             if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(cell, cell).apply { setMargins(2, 2, 2, 2) }
@@ -453,8 +466,8 @@ object PopupManager {
 
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xF2FFFFFF.toInt())
-            setPadding(6, 6, 6, 6)
+            background = roundedDrawable(0xF2FAFAFA.toInt(), 20f)
+            setPadding(8, 8, 8, 8)
         }
         root.addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; addView(spacer()); addView(upView); addView(spacer()) })
         root.addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; addView(leftView); addView(centerView); addView(rightView) })
@@ -474,7 +487,7 @@ object PopupManager {
         val xOffset = (anchorView.width - popupWidth) / 2
         popupWindow.showAsDropDown(anchorView, xOffset, yOffset)
 
-        return FlickPreviewHandle(popupWindow, upView, downView, leftView, rightView, centerView)
+        return FlickPreviewHandle(popupWindow, upView, downView, leftView, rightView, centerView, cellRadius)
     }
 
     // 🌟 描画位置の改善: ボタン直上に、かつ画面幅の中央寄りに配置する。

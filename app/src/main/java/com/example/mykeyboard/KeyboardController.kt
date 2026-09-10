@@ -938,10 +938,12 @@ class KeyboardController(
         }
         keyboardView.findViewById<TextView>(R.id.flick_num_space)?.setOnClickListener { dispatch(KeyboardEvent.SpaceTapped) }
         keyboardView.findViewById<TextView>(R.id.flick_num_enter)?.setOnClickListener { dispatch(KeyboardEvent.EnterTapped) }
-        // 🌟 「・」は濁点キーの代わりの位置にある単純な直接入力キー(数字モードでは濁点切替は不要)
-        keyboardView.findViewById<TextView>(R.id.flick_num_dot)?.setOnClickListener {
-            dispatch(KeyboardEvent.DirectTextCommitted("・"))
-        }
+        // 🌟 「・」は濁点キーの代わりの位置にあるキー(数字モードでは濁点切替は不要)。
+        // フリック先には{}≡≅を割り当てる。
+        wireFlickKey(
+            keyboardView.findViewById(R.id.flick_num_dot),
+            FlickKeyData(center = "・", up = "{", down = "}", left = "≡", right = "≅")
+        ) { dispatch(KeyboardEvent.DirectTextCommitted(it)) }
         // --- 数字モードの句読点キー (半角 .,?!) ---
         wireFlickKey(keyboardView.findViewById(R.id.flick_num_punct), FlickKeyDatabase.numPunctKey) {
             handlePunctuationTapped(it)

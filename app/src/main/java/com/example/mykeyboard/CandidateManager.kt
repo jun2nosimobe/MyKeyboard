@@ -195,12 +195,12 @@ class CandidateManager(
         while (variant != null && variant != lastChar && steps < 3) {
             val altHiragana = prefix + variant
 
-            val altViterbi = viterbiConverter.convert(altHiragana, trailingRomaji = "", limit = 5)
-                .filterNot { isShortHiraganaNoise(it) }
-            for (word in altViterbi) {
-                if (finalCandidates.none { it.first == word }) finalCandidates.add(Pair(word, altHiragana))
-            }
-
+            // 🌟 注意: ここでviterbiConverter.convert()を呼んではいけない。convert()は
+            // 呼ぶたびに内部の差分計算用キャッシュ(lastInput/cachedDp)をこの引数の
+            // 文字列で上書きしてしまうため、先読み用に別のかな文字列を渡すと、
+            // 次の本当のキー入力時にキャッシュの基準がズレて変換が狂う
+            // (「濁点先読みが機能していなさそう」の原因はこれだった)。
+            // dbHelper.getCandidates()は状態を持たない単純なDB検索なので安全に呼べる。
             val altDbCandidates = dbHelper.getCandidates(
                 hiragana = altHiragana,
                 trailingRomaji = "",
