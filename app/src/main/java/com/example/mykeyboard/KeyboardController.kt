@@ -358,18 +358,16 @@ class KeyboardController(
         updateUI()
     }
 
-    // 🌟 「、。が確定を兼ねているのをやめたい」への対応。
+    // 🌟 「、。が確定を兼ねているのをやめたい」「フリック入力時は。、？！を
+    // 変換候補として.,?!を出したい」への対応。
     // 句読点は本来「確定」とは無関係な1文字の入力に過ぎないのに、これまでは
     // commitDirectText経由で必ずforceCommitComposingText(未変換のひらがな確定)を
-    // 挟んでいた。composing中の時は、確定ではなく単純にcomposingバッファへ追記する
-    // (handleFlickInputと同じ扱い)ことで、変換候補を選ぶ機会を奪わないようにする。
-    // composingが無い(何も入力中でない)時だけ、これまで通り即時に確定入力する。
+    // 挟んでいた。かな入力と同じくcomposingバッファへ追記する(handleFlickInputと
+    // 同じ扱い)ことで、変換候補を選ぶ機会を奪わないようにする。こうすることで
+    // CandidateManagerが「。」に対して半角「.」も候補として提示できるようになる
+    // (composingが空のまま即時確定していると候補バー自体が出る余地がなかった)。
     private fun handlePunctuationTapped(text: String) {
-        if (state.composingText.isEmpty()) {
-            commitDirectText(text)
-        } else {
-            handleFlickInput(text)
-        }
+        handleFlickInput(text)
     }
 
     private fun commitDirectText(text: String) {

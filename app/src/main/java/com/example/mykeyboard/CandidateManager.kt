@@ -18,6 +18,9 @@ class CandidateManager(
         return word.all { it in 'ぁ'..'ん' || it == 'ー' }
     }
 
+    // 🌟 「フリック入力時は。、？！を変換候補として.,?!を出したい」への対応
+    private val punctuationHalfWidth = mapOf('。' to '.', '、' to ',', '？' to '?', '！' to '!')
+
     // 🌟 修正: 戻り値を List<Pair<String, String>> に変更
     // isFlickInputMode: フリック入力が有効な時だけtrue。「最後に入力された文字に
     // 濁点の処理が加えられる可能性を考慮して候補を表示したい」への対応で使う
@@ -176,9 +179,25 @@ class CandidateManager(
         // 目的の候補を選べるようにする。
         if (isFlickInputMode) {
             appendDakutenLookaheadCandidates(hiraganaStr, prevRid, finalCandidates)
+            appendPunctuationHalfWidthCandidate(hiraganaStr, finalCandidates)
         }
 
         return finalCandidates
+    }
+
+    // 🌟 「フリック入力時は。、？！を変換候補として.,?!を出したい」への対応。
+    // 句読点キーはcomposingバッファへの追記になったので(KeyboardController.
+    // handlePunctuationTapped参照)、末尾が。、？！のいずれかであれば、同じ位置の
+    // 半角記号版も候補として追加する。
+    private fun appendPunctuationHalfWidthCandidate(
+        hiraganaStr: String,
+        finalCandidates: MutableList<Pair<String, String>>
+    ) {
+        if (hiraganaStr.isEmpty()) return
+        val lastChar = hiraganaStr.last()
+        val halfWidth = punctuationHalfWidth[lastChar] ?: return
+        val altStr = hiraganaStr.dropLast(1) + halfWidth
+        if (finalCandidates.none { it.first == altStr }) finalCandidates.add(Pair(altStr, altStr))
     }
 
     private fun appendDakutenLookaheadCandidates(
