@@ -404,6 +404,79 @@ object PopupManager {
         showAboveAnchor(popupWindow, anchorView)
     }
 
+    // ==========================================
+    // 🌟 「フリック入力のフリック先を表示できるようにする」への対応(設定でON/OFF)。
+    // キーを押した瞬間に上下左右の割り当てを十字型に表示し、指を動かすと現在の
+    // フリック方向をハイライトする。isTouchable=falseにして、指はあくまで元の
+    // キー(アンカー)上のタッチイベントを受け続けられるようにしている。
+    // ==========================================
+    class FlickPreviewHandle(
+        private val popupWindow: PopupWindow,
+        private val up: TextView,
+        private val down: TextView,
+        private val left: TextView,
+        private val right: TextView,
+        private val center: TextView
+    ) {
+        private val highlightColor = 0xFFBBDEFB.toInt()
+
+        fun highlight(direction: TouchEventHandler.FlickDirection?) {
+            up.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.UP) highlightColor else Color.TRANSPARENT)
+            down.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.DOWN) highlightColor else Color.TRANSPARENT)
+            left.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.LEFT) highlightColor else Color.TRANSPARENT)
+            right.setBackgroundColor(if (direction == TouchEventHandler.FlickDirection.RIGHT) highlightColor else Color.TRANSPARENT)
+            center.setBackgroundColor(if (direction == null || direction == TouchEventHandler.FlickDirection.NONE) highlightColor else Color.TRANSPARENT)
+        }
+
+        fun dismiss() {
+            popupWindow.dismiss()
+        }
+    }
+
+    fun showFlickPreview(context: Context, anchorView: View, data: FlickKeyData): FlickPreviewHandle {
+        val cell = 110
+        fun cellView(text: String?, bold: Boolean = false): TextView = TextView(context).apply {
+            this.text = text ?: ""
+            textSize = 18f
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER
+            if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(cell, cell).apply { setMargins(2, 2, 2, 2) }
+        }
+        fun spacer(): View = View(context).apply { layoutParams = LinearLayout.LayoutParams(cell, cell) }
+
+        val upView = cellView(data.up)
+        val downView = cellView(data.down)
+        val leftView = cellView(data.left)
+        val rightView = cellView(data.right)
+        val centerView = cellView(data.center, bold = true)
+
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xF2FFFFFF.toInt())
+            setPadding(6, 6, 6, 6)
+        }
+        root.addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; addView(spacer()); addView(upView); addView(spacer()) })
+        root.addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; addView(leftView); addView(centerView); addView(rightView) })
+        root.addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; addView(spacer()); addView(downView); addView(spacer()) })
+
+        val popupWidth = cell * 3 + 12
+        val popupHeight = cell * 3 + 12
+        val popupWindow = PopupWindow(root, popupWidth, popupHeight, false).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            elevation = 24f
+            isFocusable = false
+            isOutsideTouchable = false
+            isTouchable = false
+        }
+
+        val yOffset = -anchorView.height - popupHeight - 12
+        val xOffset = (anchorView.width - popupWidth) / 2
+        popupWindow.showAsDropDown(anchorView, xOffset, yOffset)
+
+        return FlickPreviewHandle(popupWindow, upView, downView, leftView, rightView, centerView)
+    }
+
     // 🌟 描画位置の改善: ボタン直上に、かつ画面幅の中央寄りに配置する。
     // 単純にshowAsDropDown(anchorView, 0, yOffset)だけだと、画面の端に近いキーの上では
     // ポップアップが画面外にはみ出すことがあったため、水平位置は画面中央基準で

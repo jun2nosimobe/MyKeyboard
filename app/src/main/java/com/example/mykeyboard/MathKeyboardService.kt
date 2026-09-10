@@ -84,6 +84,8 @@ class MathKeyboardService : InputMethodService() {
 
         // 接続先が切り替わる可能性があるため、常に最新のコネクションをControllerに更新
         controller.currentInputConnection = currentInputConnection
+        // 🌟 「複数行入力できる場所ではEnterは送信ではなく改行」の判定に使う
+        controller.currentEditorInfo = info
 
         themeManager.reloadBackground(keyboardView)
         updateKeyboardLabels()

@@ -19,7 +19,10 @@ class CandidateManager(
     }
 
     // 🌟 修正: 戻り値を List<Pair<String, String>> に変更
-    fun generateCandidates(state: KeyboardState): List<Pair<String, String>> {
+    // isFlickInputMode: フリック入力が有効な時だけtrue。「最後に入力された文字に
+    // 濁点の処理が加えられる可能性を考慮して候補を表示したい」への対応で使う
+    // (詳細は末尾のappendDakutenLookaheadCandidatesを参照)。
+    fun generateCandidates(state: KeyboardState, isFlickInputMode: Boolean = false): List<Pair<String, String>> {
 
         val finalCandidates = mutableListOf<Pair<String, String>>()
         val rawStr = state.composingText
@@ -165,6 +168,54 @@ class CandidateManager(
             Pair(rawStr, rawStr)
         )
 
+        // 🌟 「変換候補で最後に入力された文字に濁点の処理が加えられる可能性を
+        // 考慮して候補を表示したい（フリック入力時限定）」への対応。
+        // フリック入力では、かな1文字を打った直後に「゛゜」キーで濁点/半濁点/
+        // 小文字化することがよくある(か→が等)。その操作をする前から、した後の
+        // 変換候補も先読みして混ぜておくことで、わざわざ濁点キーを押さなくても
+        // 目的の候補を選べるようにする。
+        if (isFlickInputMode) {
+            appendDakutenLookaheadCandidates(hiraganaStr, prevRid, finalCandidates)
+        }
+
         return finalCandidates
+    }
+
+    private fun appendDakutenLookaheadCandidates(
+        hiraganaStr: String,
+        prevRid: Int,
+        finalCandidates: MutableList<Pair<String, String>>
+    ) {
+        if (hiraganaStr.isEmpty()) return
+        val lastChar = hiraganaStr.last()
+        val prefix = hiraganaStr.dropLast(1)
+
+        var variant = FlickKeyDatabase.dakutenCycle[lastChar]
+        var steps = 0
+        while (variant != null && variant != lastChar && steps < 3) {
+            val altHiragana = prefix + variant
+
+            val altViterbi = viterbiConverter.convert(altHiragana, trailingRomaji = "", limit = 5)
+                .filterNot { isShortHiraganaNoise(it) }
+            for (word in altViterbi) {
+                if (finalCandidates.none { it.first == word }) finalCandidates.add(Pair(word, altHiragana))
+            }
+
+            val altDbCandidates = dbHelper.getCandidates(
+                hiragana = altHiragana,
+                trailingRomaji = "",
+                prevRid = prevRid,
+                matrix = matrix,
+                limit = 5
+            ).filterNot { isShortHiraganaNoise(it.first) }
+            for (cand in altDbCandidates) {
+                if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(cand)
+            }
+
+            if (finalCandidates.none { it.first == altHiragana }) finalCandidates.add(Pair(altHiragana, altHiragana))
+
+            variant = FlickKeyDatabase.dakutenCycle[variant]
+            steps++
+        }
     }
 }

@@ -87,6 +87,7 @@ fun UnifiedSettingsScreen(
     var bgColorPacked by remember { mutableStateOf(prefs.getInt("bgColorPacked", AndroidColor.parseColor("#ECECEC"))) }
     var enableLearningBeta by remember { mutableStateOf(prefs.getBoolean("enableLearningBeta", false)) }
     var useFlickInput by remember { mutableStateOf(prefs.getBoolean("useFlickInput", false)) }
+    var showFlickPreview by remember { mutableStateOf(prefs.getBoolean("showFlickPreview", true)) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -390,6 +391,28 @@ fun UnifiedSettingsScreen(
                         onCheckedChange = { isChecked ->
                             useFlickInput = isChecked
                             prefs.edit().putBoolean("useFlickInput", isChecked).apply()
+                        }
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                        Text("フリック先プレビュー", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "フリックキーを押している間、上下左右に何が入力されるかを表示します。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    Switch(
+                        checked = showFlickPreview,
+                        onCheckedChange = { isChecked ->
+                            showFlickPreview = isChecked
+                            prefs.edit().putBoolean("showFlickPreview", isChecked).apply()
                         }
                     )
                 }

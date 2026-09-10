@@ -50,7 +50,7 @@ object FlickKeyDatabase {
         // 🌟 5はテンキーの中心なので方向キー(↑↓←→)を割り当てる
         R.id.flick_num5 to FlickKeyData(center = "5", up = "↑", down = "↓", left = "←", right = "→"),
         R.id.flick_num6 to FlickKeyData(center = "6", up = "|", down = "~", left = "<", right = ">"),
-        R.id.flick_num7 to FlickKeyData(center = "7"),
+        R.id.flick_num7 to FlickKeyData(center = "7", up = "↔", down = "⇒", left = "⇔", right = "↷"),
         R.id.flick_num8 to FlickKeyData(center = "8", up = "^", down = "_", left = "(", right = ")"),
         R.id.flick_num9 to FlickKeyData(center = "9", up = "%", down = "°", left = "∞", right = "√"),
         R.id.flick_num0 to FlickKeyData(center = "0", up = ".", down = ",", left = "'", right = "\"")
@@ -71,7 +71,7 @@ object FlickKeyDatabase {
         'そ' to 'ぞ', 'ぞ' to 'そ',
         'た' to 'だ', 'だ' to 'た',
         'ち' to 'ぢ', 'ぢ' to 'ち',
-        'つ' to 'づ', 'づ' to 'っ', 'っ' to 'つ',
+        'つ' to 'っ', 'っ' to 'づ', 'づ' to 'つ',
         'て' to 'で', 'で' to 'て',
         'と' to 'ど', 'ど' to 'と',
         'は' to 'ば', 'ば' to 'ぱ', 'ぱ' to 'は',

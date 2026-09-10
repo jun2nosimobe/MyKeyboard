@@ -10,6 +10,8 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.text.InputType
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -28,6 +30,9 @@ class KeyboardController(
         private set
 
     var currentInputConnection: InputConnection? = null
+    // 🌟 「複数行入力できる場所ではEnterは送信ではなく改行」への対応。
+    // MathKeyboardService.onStartInputViewから、入力欄が切り替わるたびに渡される。
+    var currentEditorInfo: EditorInfo? = null
 
     // 各モジュールのインスタンス
     private val composer = Composer()
@@ -64,6 +69,12 @@ class KeyboardController(
         if (state.currentMode != MathKeyboardService.InputMode.JAPANESE) return false
         val prefs = context.getSharedPreferences("KeyboardSettings", android.content.Context.MODE_PRIVATE)
         return prefs.getBoolean("useFlickInput", false)
+    }
+
+    // 🌟 「設定でフリック入力のフリック先を表示できるようにする」への対応
+    private fun isFlickPreviewEnabled(): Boolean {
+        val prefs = context.getSharedPreferences("KeyboardSettings", android.content.Context.MODE_PRIVATE)
+        return prefs.getBoolean("showFlickPreview", true)
     }
 
     private fun updateKeyboardLayoutVisibility() {
@@ -166,7 +177,7 @@ class KeyboardController(
 
                     // DB検索をIOスレッドで実行
                     val candidates = withContext(Dispatchers.IO) {
-                        candidateManager.generateCandidates(currentState)
+                        candidateManager.generateCandidates(currentState, isFlickInputMode = isFlickModeActive())
                     }
 
                     // UI更新（メインスレッド）
@@ -383,9 +394,28 @@ class KeyboardController(
         if (needsUpdate) requestUpdateLabels()
     }
 
+    // 🌟 「複数行入力できる場所ではEnterは送信ではなく改行」への対応。
+    // inputTypeにTYPE_TEXT_FLAG_MULTI_LINEが立っているフィールド(メモ欄など)では
+    // 常に改行を挿入する。それ以外(1行入力欄)では、imeOptionsのアクション
+    // (送信/検索/次へ等)をperformEditorActionで明示的に呼び出す。これは
+    // 生のKEYCODE_ENTERイベント送出よりも、Compose製の入力欄やWebViewなどでも
+    // 確実にアプリ側の「送信」ハンドラを起動できる標準的な方法。
     private fun handleEnterTapped() {
         if (state.composingText.isNotEmpty()) {
             forceCommitComposingText(appendSpace = false)
+            return
+        }
+        val info = currentEditorInfo
+        val isMultiline = info != null &&
+                (info.inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0
+        if (isMultiline) {
+            currentInputConnection?.commitText("\n", 1)
+            return
+        }
+        val actionId = (info?.imeOptions ?: EditorInfo.IME_ACTION_UNSPECIFIED) and EditorInfo.IME_MASK_ACTION
+        val noEnterActionFlag = info != null && (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
+        if (info != null && actionId != EditorInfo.IME_ACTION_NONE && !noEnterActionFlag) {
+            currentInputConnection?.performEditorAction(actionId)
         } else {
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
@@ -753,26 +783,43 @@ class KeyboardController(
         // 分岐しないため)。フリックキーは長押しポップアップ自体が不要なので、
         // タップ/フリックの判定だけを行う専用の軽量リスナーを使う。
         val flickThreshold = 40f
+        fun resolveDirection(dx: Float, dy: Float): TouchEventHandler.FlickDirection? = when {
+            Math.abs(dx) < flickThreshold && Math.abs(dy) < flickThreshold -> null
+            Math.abs(dx) > Math.abs(dy) -> if (dx > 0) TouchEventHandler.FlickDirection.RIGHT else TouchEventHandler.FlickDirection.LEFT
+            else -> if (dy > 0) TouchEventHandler.FlickDirection.DOWN else TouchEventHandler.FlickDirection.UP
+        }
         fun wireFlickKey(button: TextView?, data: FlickKeyData, onResolved: (String) -> Unit) {
             button ?: return
             var startX = 0f
             var startY = 0f
+            var previewHandle: PopupManager.FlickPreviewHandle? = null
+            val hasFlickDirections = data.up != null || data.down != null || data.left != null || data.right != null
             button.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> { v.isPressed = true; startX = event.x; startY = event.y; true }
+                    MotionEvent.ACTION_DOWN -> {
+                        v.isPressed = true; startX = event.x; startY = event.y
+                        if (hasFlickDirections && isFlickPreviewEnabled()) {
+                            previewHandle = PopupManager.showFlickPreview(context, v, data)
+                            previewHandle?.highlight(null)
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        previewHandle?.highlight(resolveDirection(event.x - startX, event.y - startY))
+                        true
+                    }
                     MotionEvent.ACTION_UP -> {
                         v.isPressed = false
-                        val dx = event.x - startX
-                        val dy = event.y - startY
-                        val direction = when {
-                            Math.abs(dx) < flickThreshold && Math.abs(dy) < flickThreshold -> null
-                            Math.abs(dx) > Math.abs(dy) -> if (dx > 0) TouchEventHandler.FlickDirection.RIGHT else TouchEventHandler.FlickDirection.LEFT
-                            else -> if (dy > 0) TouchEventHandler.FlickDirection.DOWN else TouchEventHandler.FlickDirection.UP
-                        }
+                        val direction = resolveDirection(event.x - startX, event.y - startY)
+                        previewHandle?.dismiss(); previewHandle = null
                         onResolved(direction?.let { data.forDirection(it) } ?: data.center)
                         true
                     }
-                    MotionEvent.ACTION_CANCEL -> { v.isPressed = false; true }
+                    MotionEvent.ACTION_CANCEL -> {
+                        v.isPressed = false
+                        previewHandle?.dismiss(); previewHandle = null
+                        true
+                    }
                     else -> true
                 }
             }
