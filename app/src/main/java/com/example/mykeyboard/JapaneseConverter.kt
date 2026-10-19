@@ -13,12 +13,32 @@ class ViterbiPath(
     val prev: ViterbiPath?
 )
 
+// 🌟 部分変換(先頭文節だけを確定して残りは変換待ちに残す)対応。
+// firstSegmentWord/firstSegmentHiraganaLength は、この候補が2文節以上に
+// 分かれる時だけ非null。1文節だけの候補(=text全体で1語)では常にnull。
+data class ViterbiResult(
+    val text: String,
+    val firstSegmentWord: String?,
+    val firstSegmentHiraganaLength: Int,
+    val cost: Int = 0 // 通常の変換と予測変換の候補を混ぜて並べる時に使う
+)
+
 class JapaneseConverter(
     private val db: DictionaryDatabaseHelper,
     private val matrix: MatrixManager
 ) {
     private val queryCache = HashMap<String, List<DictionaryDatabaseHelper.DictEntry>>()
     private val BEAM_WIDTH = 50
+    private val UNK_ID = 2999
+    private val UNK_COST = 8000
+
+    // 🌟 予測変換(engine.py の PRED_* と同じ値)。最後の語の読みが PRED_MIN_HEAD 文字以上ある時だけ、
+    // その読みで始まるより長い語で補う。補った候補には PRED_BASE と1文字ごとの PRED_PER_CHAR を足す
+    private val PRED_MIN_HEAD = 2
+    private val PRED_MAX_MISSING = 4
+    private val PRED_ROWS = 30
+    private val PRED_BASE = 2000
+    private val PRED_PER_CHAR = 150
 
     // ==========================================
     // 🌟 新規：前回の計算状態（DP表）を保持するキャッシュ
@@ -26,19 +46,67 @@ class JapaneseConverter(
     private var lastInput = ""
     private var cachedDp = Array<MutableList<ViterbiPath>>(0) { mutableListOf() }
 
+    // 🌟 変換はKeyboardControllerの変換専用スレッドで走り、resetCacheはメインスレッドから
+    // 呼ばれる。直接消すと計算中の表を壊すので、印だけ付けて次のconvertの冒頭で消す。
+    @Volatile private var resetRequested = false
+
     // 外部からキャッシュを強制リセットしたい時（確定時やバックスペース時など）に呼ぶ
     fun resetCache() {
+        resetRequested = true
+    }
+
+    private fun clearCacheNow() {
+        resetRequested = false
         lastInput = ""
         cachedDp = Array(0) { mutableListOf() }
         queryCache.clear()
     }
 
+    // 🌟 予測変換。直前のconvert(同じ読み)で作った格子を使い、最後の語だけ読みの続きを補う
+    fun predict(hiragana: String, limit: Int = 10): List<ViterbiResult> {
+        val len = hiragana.length
+        if (hiragana != lastInput || cachedDp.size != len + 1) return emptyList()
+        val ends = mutableListOf<ViterbiPath>()
+        for (i in kotlin.math.max(0, len - 15)..(len - PRED_MIN_HEAD)) {
+            val prevPaths = cachedDp[i]
+            if (prevPaths.isEmpty()) continue
+            val head = hiragana.substring(i)
+            val matches = queryCache.getOrPut("PRED_$head") { db.getPredictionMatches(head, PRED_ROWS) }
+            for (match in matches) {
+                val missing = match.yomi.length - head.length
+                if (missing > PRED_MAX_MISSING) continue
+                val extra = match.weight + PRED_BASE + PRED_PER_CHAR * missing
+                for (prevPath in prevPaths) {
+                    val cost = prevPath.cost + matrix.getConnectionCost(prevPath.rid, match.lid) + extra
+                    ends.add(ViterbiPath(match.word, cost, match.rid, i, prevPath))
+                }
+            }
+        }
+        ends.sortBy { it.cost }
+        val seen = HashSet<String>()
+        val results = mutableListOf<ViterbiResult>()
+        for (end in ends) {
+            val words = mutableListOf<String>()
+            var curr: ViterbiPath? = end
+            while (curr != null && curr.word != "BOS") {
+                words.add(curr.word)
+                curr = curr.prev
+            }
+            val text = words.reversed().joinToString("")
+            if (!seen.add(text)) continue
+            results.add(ViterbiResult(text, null, 0, end.cost))
+            if (results.size >= limit) break
+        }
+        return results
+    }
+
     // 🌟 trailingRomaji: まだ母音が確定していない末尾の子音1文字。指定時は最後の
     // 位置(j==len)の辞書検索がこの文字も加味した予測変換になる（詳細は
     // DictionaryDatabaseHelper.getPrefixMatchesForViterbi 参照）。
-    fun convert(hiragana: String, trailingRomaji: String = "", limit: Int = 5): List<String> {
+    fun convert(hiragana: String, trailingRomaji: String = "", limit: Int = 5): List<ViterbiResult> {
+        if (resetRequested) clearCacheNow()
         if (hiragana.isEmpty()) {
-            resetCache()
+            clearCacheNow()
             return emptyList()
         }
 
@@ -88,7 +156,10 @@ class JapaneseConverter(
 
                 val sub = hiragana.substring(i, j)
 
-                var dictMatches = if (j == len) {
+                // 🌟 v2: 前方一致(予測)は、末尾に母音待ちの子音がある時だけ使う。読みが確定している
+                // 時に予測を混ぜると、長いまれな語(かんばせ→顔 等)が短い読みに紛れ込む。予測候補は
+                // CandidateManager が dbHelper.getCandidates で別に後ろへ並べている。
+                var dictMatches = if (j == len && trailingRomaji.isNotEmpty()) {
                     // 🌟 trailingRomaji が変わると同じ sub でも検索結果が変わるので
                     // キャッシュキーに含める（含めないと保留中の子音を変えた時に
                     // 古い候補が返ってしまう）。
@@ -102,7 +173,8 @@ class JapaneseConverter(
                 }
 
                 if (dictMatches.isEmpty() && sub.length == 1) {
-                    dictMatches = listOf(DictionaryDatabaseHelper.DictEntry(sub, sub, 8000, 0, 0))
+                    // 🌟 v2: 未知語は専用ID(行列の2999)。v1はID 0(文頭と同じ)で、前後の接続が無料だった
+                    dictMatches = listOf(DictionaryDatabaseHelper.DictEntry(sub, sub, UNK_COST, UNK_ID, UNK_ID))
                 }
 
                 for (match in dictMatches) {
@@ -172,25 +244,40 @@ class JapaneseConverter(
 
         val topPaths = finalPaths.sortedBy { it.cost }
 
-        // 🌟 重複チェックによる $O(N)$ の遅延を防ぐため LinkedHashSet に変更
-        val resultCandidates = java.util.LinkedHashSet<String>()
+        val seenTexts = HashSet<String>()
+        val results = mutableListOf<ViterbiResult>()
 
         for (path in topPaths) {
             val words = mutableListOf<String>()
+            val nodes = mutableListOf<ViterbiPath>()
             var curr: ViterbiPath? = path.prev
 
             while (curr != null && curr.word != "BOS") {
                 words.add(curr.word)
+                nodes.add(curr)
                 curr = curr.prev
             }
 
             val candidateString = words.reversed().joinToString("")
-            // contains判定不要、そのままaddするだけで順序を保って重複排除される
-            resultCandidates.add(candidateString)
+            if (!seenTexts.add(candidateString)) continue // 既出ならスキップ(重複排除)
 
-            if (resultCandidates.size >= limit) break
+            // 🌟 部分変換用: nodesは[EOS側の最後の文節, ..., 先頭文節]の順。
+            // 2文節以上に分かれている時だけ、先頭文節(nodes.last)の単語と、
+            // それが消費したひらがな文字数(=2番目の文節の開始位置)を記録する。
+            var firstSegmentWord: String? = null
+            var firstSegmentLen = 0
+            if (nodes.size >= 2) {
+                val firstNode = nodes.last()
+                val secondNode = nodes[nodes.size - 2]
+                firstSegmentWord = firstNode.word
+                firstSegmentLen = secondNode.startIndex
+            }
+
+            results.add(ViterbiResult(candidateString, firstSegmentWord, firstSegmentLen, path.cost))
+
+            if (results.size >= limit) break
         }
 
-        return resultCandidates.toList()
+        return results
     }
 }

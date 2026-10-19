@@ -88,6 +88,11 @@ fun UnifiedSettingsScreen(
     var enableLearningBeta by remember { mutableStateOf(prefs.getBoolean("enableLearningBeta", false)) }
     var useFlickInput by remember { mutableStateOf(prefs.getBoolean("useFlickInput", false)) }
     var showFlickPreview by remember { mutableStateOf(prefs.getBoolean("showFlickPreview", true)) }
+    var heightScaleJa by remember { mutableStateOf(KeyboardHeightScaler.load(prefs, japanese = true)) }
+    var heightScaleEn by remember { mutableStateOf(KeyboardHeightScaler.load(prefs, japanese = false)) }
+    // プレビューには最後に動かしたスライダーの高さを映す
+    var previewJapanese by remember { mutableStateOf(true) }
+    val keyboardHeightScale = if (previewJapanese) heightScaleJa else heightScaleEn
 
     val imagePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -128,18 +133,19 @@ fun UnifiedSettingsScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "プレビュー (実際の入力はできません)",
+                    text = "プレビュー (実際の入力はできません・${if (previewJapanese) "日本語" else "英語"}の高さ)",
                     style = MaterialTheme.typography.labelMedium,
                     color = ComposeColor.Gray,
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                 )
 
                 KeyboardButtonPreviewView(
-                    modifier = Modifier.fillMaxWidth().height(250.dp),
+                    modifier = Modifier.fillMaxWidth().height((250 * keyboardHeightScale).dp),
                     keyTextColor = keyTextColor,
                     bgAlpha = bgAlpha,
                     bgColorPacked = bgColorPacked,
-                    bgImagePath = bgImagePath
+                    bgImagePath = bgImagePath,
+                    heightScale = keyboardHeightScale
                 )
             }
         }
@@ -186,6 +192,37 @@ fun UnifiedSettingsScreen(
                             prefs.edit().putFloat("bgAlpha", it).apply()
                         },
                         valueRange = 0f..1f
+                    )
+                }
+
+                HorizontalDivider()
+
+                Column {
+                    Text("キーボードの高さ")
+                    Text(
+                        "日本語モードと、英語・数学文字のモードで別に設定できます。変更は次にキーボードを開き直した時に反映されます。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Text("日本語: ${(heightScaleJa * 100).toInt()}%")
+                    Slider(
+                        value = heightScaleJa,
+                        onValueChange = {
+                            heightScaleJa = it
+                            previewJapanese = true
+                            prefs.edit().putFloat(KeyboardHeightScaler.PREF_JAPANESE, it).apply()
+                        },
+                        valueRange = 0.7f..1.4f
+                    )
+                    Text("英語・数学文字: ${(heightScaleEn * 100).toInt()}%")
+                    Slider(
+                        value = heightScaleEn,
+                        onValueChange = {
+                            heightScaleEn = it
+                            previewJapanese = false
+                            prefs.edit().putFloat(KeyboardHeightScaler.PREF_OTHER, it).apply()
+                        },
+                        valueRange = 0.7f..1.4f
                     )
                 }
 
@@ -359,7 +396,7 @@ fun UnifiedSettingsScreen(
                     Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                         Text("入力学習機能 (日本語)", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "確定した変換を記憶し、次回の予測候補の優先度を上げます。予期せぬ動作をする可能性があるためβ版として提供しています。",
+                            "確定した変換を記憶し、次回の予測候補の優先度を上げます。また、1位以外の候補を選んだ時だけ「訂正記録」を端末内に保存します(辞書改善のためPCから取り込むことがあります。内容は読み・選んだ語・当時の1位候補のみで、文章そのものは含みません)。予期せぬ動作をする可能性があるためβ版として提供しています。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -454,7 +491,8 @@ fun KeyboardButtonPreviewView(
     keyTextColor: Int,
     bgAlpha: Float,
     bgColorPacked: Int,
-    bgImagePath: String?
+    bgImagePath: String?,
+    heightScale: Float
 ) {
     AndroidView(
         modifier = modifier,
@@ -464,6 +502,11 @@ fun KeyboardButtonPreviewView(
             view
         },
         update = { view ->
+            // 基準の高さを記録した縮尺器をviewのtagに持たせ、スライダー操作のたびに再適用する
+            val scaler = (view.tag as? KeyboardHeightScaler)
+                ?: KeyboardHeightScaler(view, view.resources).also { view.tag = it }
+            scaler.apply(heightScale)
+
             val rootLayout = view.findViewById<RelativeLayout>(R.id.keyboard_root_layout)
             rootLayout?.setBackgroundColor(bgColorPacked)
 

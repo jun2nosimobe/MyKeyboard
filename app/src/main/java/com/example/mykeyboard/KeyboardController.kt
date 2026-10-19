@@ -45,6 +45,9 @@ class KeyboardController(
     // UI参照
     private val candidateScroll: HorizontalScrollView? = keyboardView.findViewById(R.id.candidate_scroll)
     private val candidateLayout: LinearLayout? = keyboardView.findViewById(R.id.candidate_layout)
+    // 🌟 タップされた候補チップ。確定直後に押下ハイライトだけを即座に解除するために使う
+    // (候補欄全体を空にして隠すと一瞬ちらつくため、こちらの方式に変更した)。
+    private var lastTappedCandidateView: TextView? = null
 
     // 🌟 フリック入力: ローマ字QWERTY配列と12キーフリック配列は同じ場所に重ねて
     // 配置してあり、設定(useFlickInput)とモードに応じてどちらか一方だけを表示する。
@@ -95,6 +98,10 @@ class KeyboardController(
     // 🌟 非同期処理 (Flow/Coroutines)
     private val controllerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val stateFlow = MutableStateFlow(state)
+    // 🌟 変換専用の1本のスレッド。Dispatchers.IOだと、速く打った時にcollectLatestが前の計算を
+    // 止めきれず(DB検索は中断できない)、次の計算が別スレッドで同時に走ってJapaneseConverterの
+    // キャッシュを同時に書き換えていた。1本にすれば順番に処理され、キャッシュも安全に使える。
+    private val conversionDispatcher = java.util.concurrent.Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 
     // タッチルーター用
     private val dynamicRouterViews = mutableMapOf<Int, View>()
@@ -163,6 +170,8 @@ class KeyboardController(
 
     init {
         Thread { matrixManager.loadMatrix() }.start()
+        // 🌟 重い前方一致検索(先頭1文字)を、最初の入力より前に裏で引いておく
+        controllerScope.launch(conversionDispatcher) { dbHelper.warmUpPrefixCache() }
 
         // 🌟 変換計算の非同期パイプライン (Debounce 50ms)
         controllerScope.launch {
@@ -175,8 +184,8 @@ class KeyboardController(
                         return@collectLatest
                     }
 
-                    // DB検索をIOスレッドで実行
-                    val candidates = withContext(Dispatchers.IO) {
+                    // DB検索を変換専用スレッドで実行
+                    val candidates = withContext(conversionDispatcher) {
                         candidateManager.generateCandidates(currentState, isFlickInputMode = isFlickModeActive())
                     }
 
@@ -199,7 +208,7 @@ class KeyboardController(
             is KeyboardEvent.SpaceTapped -> forceCommitComposingText(appendSpace = true)
             is KeyboardEvent.EnterTapped -> handleEnterTapped()
             is KeyboardEvent.BackspaceTapped -> handleBackspace()
-            is KeyboardEvent.CandidateSelected -> handleCandidateSelected(event.text)
+            is KeyboardEvent.CandidateSelected -> handleCandidateSelected(event.text, event.yomi)
             is KeyboardEvent.ModeChanged -> handleModeChanged(event.mode, event.isOneShot)
             is KeyboardEvent.ShiftToggled -> handleShiftToggled()
             is KeyboardEvent.FlickInput -> handleFlickInput(event.hiragana)
@@ -288,20 +297,38 @@ class KeyboardController(
         }
     }
 
-    private fun handleCandidateSelected(candidate: String) {
+    private fun handleCandidateSelected(candidate: String, candidateYomi: String) {
+        val hiraganaStr = composer.convertRomajiToHiragana(state.composingText)
+        val cleanHiragana = hiraganaStr.replace(Regex("[a-zA-Z-]+$"), "")
+
+        // 🌟 部分変換(先頭文節だけ確定): 候補の読みが現在の全体より短く、かつ
+        // その前方一致であれば、まだ入力途中とみなし残りを変換待ちに戻す。
+        val isPartial = state.currentMode == MathKeyboardService.InputMode.JAPANESE &&
+                candidateYomi.isNotEmpty() && candidateYomi.length < cleanHiragana.length &&
+                cleanHiragana.startsWith(candidateYomi)
+
         // 🌟 修正: 日本語モードの時だけ学習機能（Viterbi辞書への登録）を動かす
         if (state.currentMode == MathKeyboardService.InputMode.JAPANESE) {
-            val hiraganaStr = composer.convertRomajiToHiragana(state.composingText)
-            val cleanHiragana = hiraganaStr.replace(Regex("[a-zA-Z-]+$"), "")
-
             if (cleanHiragana.isNotEmpty() && candidate.isNotEmpty()) {
                 // 🌟 NEW: 設定（SharedPreferences）からβ版学習機能のオン/オフを読み取る
                 val prefs = context.getSharedPreferences("KeyboardSettings", Context.MODE_PRIVATE)
                 val isLearningEnabled = prefs.getBoolean("enableLearningBeta", false)
 
-                // 設定がON(true)の時だけ、裏で学習処理を走らせる
-                if (isLearningEnabled) {
-                    CoroutineScope(Dispatchers.IO).launch {
+                // 設定がON(true)の時だけ、裏で学習処理を走らせる。部分確定は
+                // まだ入力の途中(残りが変換待ちに戻る)なので、学習・訂正判定の
+                // 対象は全体を確定した時だけにする。
+                if (isLearningEnabled && !isPartial) {
+                    // 🌟 実入力からの継続学習フェーズ1(learn_math_japanese/docs/
+                    // CONTINUOUS_LEARNING_DESIGN.md)。「Viterbiの1位ではない候補を
+                    // 選んだ」訂正イベントだけを記録する。viterbiConverterはスレッド
+                    // セーフではないので、判定のconvert()も変換専用スレッドで行う
+                    // (メインスレッドで呼ぶと、計算中の差分キャッシュと競合し、確定の反応も遅れる)。
+                    controllerScope.launch(conversionDispatcher) {
+                        val viterbiTop1 = viterbiConverter.convert(cleanHiragana, trailingRomaji = "", limit = 1).firstOrNull()?.text
+                        viterbiConverter.resetCache()
+                        if (viterbiTop1 != null && viterbiTop1 != candidate) {
+                            dbHelper.logCorrection(cleanHiragana, candidate, viterbiTop1)
+                        }
                         dbHelper.learnWord(candidate, cleanHiragana)
                     }
                 }
@@ -312,6 +339,34 @@ class KeyboardController(
         // 🌟 確定したのでViterbiの差分探索キャッシュ（前回入力の名残）をリセットする。
         // これを忘れると次の単語の変換時に古いDPが再利用され、BOSノードが重複増殖してしまう。
         viterbiConverter.resetCache()
+        // 🌟 タップした候補チップの押下リップルが、次の予測変換候補が非同期
+        // (debounce+IOスレッド)で描画されるまでの間そのまま残ってしまうバグへの対応。
+        // 以前は候補欄全体を一旦空にして隠していたが、それだと次の候補が出るまでの
+        // 間、候補欄が一瞬消えてちらついて見えてしまっていた。押下状態だけを
+        // 即座に解除すれば、テキスト自体は残ったまま(次の候補で自然に上書きされる)
+        // ハイライトだけがすぐ消えるので、ちらつきが無くなる。
+        lastTappedCandidateView?.let {
+            it.isPressed = false
+            it.jumpDrawablesToCurrentState()
+        }
+        lastTappedCandidateView = null
+
+        if (isPartial) {
+            // 🌟 先頭文節だけ確定。残りのひらがな(既に確定済みの表層形なので
+            // ローマ字ではなくひらがなそのもの。Composer.convertRomajiToHiraganaは
+            // 未知文字をそのまま素通りするフリック入力と同じ経路なので安全)を
+            // 新しいcomposingTextとして変換待ちに戻す。
+            val remainingHiragana = cleanHiragana.substring(candidateYomi.length)
+            state = state.copy(
+                composingText = remainingHiragana,
+                isDirectRomajiMode = false,
+                lastConfirmedWord = candidate,
+                lastKeyPressTime = System.currentTimeMillis()
+            )
+            updateUI()
+            return // 🌟 まだ入力継続中なので、以降のシフト/モードリセットは行わない
+        }
+
         state = state.copy(
             composingText = "",
             isDirectRomajiMode = false,
@@ -404,14 +459,29 @@ class KeyboardController(
             return
         }
         val info = currentEditorInfo
+        val actionId = (info?.imeOptions ?: EditorInfo.IME_ACTION_UNSPECIFIED) and EditorInfo.IME_MASK_ACTION
+        val noEnterActionFlag = info != null && (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
+
+        // 🌟 修正: Google検索の検索窓のように「複数行入力は可能だが、Enterは
+        // 改行ではなく送信/検索として扱ってほしい」フィールドがある。
+        // 従来はTYPE_TEXT_FLAG_MULTI_LINEが立っていると無条件で改行を挿入して
+        // いたため、こういうフィールドでEnterが検索を実行せず改行になって
+        // しまっていた。アプリが明示的にアクション(検索/送信/次へ等、
+        // UNSPECIFIED=未指定は除く)を指定していれば、複数行フラグより
+        // そちらを優先する。
+        val hasExplicitAction = info != null && actionId != EditorInfo.IME_ACTION_NONE &&
+                actionId != EditorInfo.IME_ACTION_UNSPECIFIED && !noEnterActionFlag
+        if (hasExplicitAction) {
+            currentInputConnection?.performEditorAction(actionId)
+            return
+        }
+
         val isMultiline = info != null &&
                 (info.inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE) != 0
         if (isMultiline) {
             currentInputConnection?.commitText("\n", 1)
             return
         }
-        val actionId = (info?.imeOptions ?: EditorInfo.IME_ACTION_UNSPECIFIED) and EditorInfo.IME_MASK_ACTION
-        val noEnterActionFlag = info != null && (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0
         if (info != null && actionId != EditorInfo.IME_ACTION_NONE && !noEnterActionFlag) {
             currentInputConnection?.performEditorAction(actionId)
         } else {
@@ -427,6 +497,7 @@ class KeyboardController(
             isOneShotMode = isOneShot
         )
         updateKeyboardLayoutVisibility()
+        applyKeyboardHeightScale()
         requestUpdateLabels()
     }
 
@@ -497,6 +568,14 @@ class KeyboardController(
         return null
     }
 
+    // 🌟 部分変換候補(先頭文節だけの候補、読みが現在の全体より短い)に付ける
+    // 小さな目印。全体確定の候補とタップ時の見た目を区別するため。
+    private fun partialBadgeSuffix(yomi: String, currentFullHiragana: String): String? {
+        if (yomi.isEmpty() || yomi.length >= currentFullHiragana.length) return null
+        if (!currentFullHiragana.startsWith(yomi)) return null
+        return "…"
+    }
+
     private fun updateCandidateView(candidates: List<Pair<String, String>>) {
         if (candidates.isEmpty()) {
             candidateScroll?.visibility = View.GONE
@@ -504,11 +583,13 @@ class KeyboardController(
         }
         candidateScroll?.visibility = View.VISIBLE
         val rippleResId = getRippleResource()
+        val currentFullHiragana = composer.convertRomajiToHiragana(state.composingText)
 
         val childCount = candidateLayout?.childCount ?: 0
         for (i in 0 until maxOf(candidates.size, childCount)) {
             if (i < candidates.size) {
                 val word = candidates[i].first
+                val yomi = candidates[i].second
                 var tv = candidateLayout?.getChildAt(i) as? TextView
                 if (tv == null) {
                     tv = TextView(context).apply {
@@ -518,7 +599,7 @@ class KeyboardController(
                     }
                     candidateLayout?.addView(tv)
                 }
-                val badge = widthBadgeSuffix(word)
+                val badge = widthBadgeSuffix(word) ?: partialBadgeSuffix(yomi, currentFullHiragana)
                 if (badge != null) {
                     val spannable = android.text.SpannableString(word + badge)
                     spannable.setSpan(
@@ -536,7 +617,10 @@ class KeyboardController(
                     tv.text = word
                 }
                 tv.visibility = View.VISIBLE
-                tv.setOnClickListener { dispatch(KeyboardEvent.CandidateSelected(word)) }
+                tv.setOnClickListener {
+                    lastTappedCandidateView = tv
+                    dispatch(KeyboardEvent.CandidateSelected(word, yomi))
+                }
             } else {
                 candidateLayout?.getChildAt(i)?.visibility = View.GONE
             }
@@ -773,6 +857,22 @@ class KeyboardController(
 
         setupFlickKeyboard(rippleResId)
         updateKeyboardLayoutVisibility()
+        applyKeyboardHeightScale()
+    }
+
+    // 🌟 キーボードの高さ設定(MainActivityの「キーボードの高さ」スライダー)を反映する。
+    // setupKeyboard()での初回に加え、キーボードが表示されるたび(MathKeyboardService.
+    // onStartInputView)にも呼ぶので、設定変更は次にキーボードを開いた時に効く。
+    // onCreateInputViewは通常1回しか呼ばれないため、そこだけで適用していると
+    // スライダーを動かしても反映されなかった。
+    private val heightScaler by lazy { KeyboardHeightScaler(keyboardView, context.resources) }
+
+    // 🌟 日本語モードとそれ以外で別の倍率を使うので、モードを切り替えた時(handleModeChanged)にも呼ぶ
+    fun applyKeyboardHeightScale() {
+        val prefs = context.getSharedPreferences("KeyboardSettings", Context.MODE_PRIVATE)
+        val japanese = state.currentMode == MathKeyboardService.InputMode.JAPANESE
+        heightScaler.apply(KeyboardHeightScaler.load(prefs, japanese))
+        keyboardView.requestLayout()
     }
 
     // ==========================================

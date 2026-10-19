@@ -78,8 +78,62 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         }
 
         // 4. 再接続をトリガー（この時 onCreate / onOpen が呼ばれる）
+        synchronized(prefixRowCache) { prefixRowCache.clear() }
         writableDatabase
     }
+
+    // ==========================================
+    // 🌟 前方一致検索(予測)の結果を、GLOBのパターンごとに覚えておく。
+    // 読みの先頭1文字(「か*」等)は辞書の2万〜6万行に当たり、毎回コスト順に並べ直すのが
+    // 入力・削除の反応の遅さの主因だった(PCでも1回約16ms、子音待ちでは5パターン分)。
+    // 結果は「そのパターンのコストの安い順の上位PREFIX_ROWS件」なので、複数パターンの
+    // 合併もそれぞれの上位を合わせて並べ直せば正確に求まる。
+    // ==========================================
+    private val PREFIX_ROWS = 100
+    private val PREFIX_CACHE_SIZE = 512
+    private val prefixRowCache = object : LinkedHashMap<String, List<DictEntry>>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<DictEntry>>?) =
+            size > PREFIX_CACHE_SIZE
+    }
+
+    // 「再読込」は設定画面側の別インスタンスがファイルを差し替えるので、キーボード側のこの
+    // インスタンスはファイルの更新日時が変わったことでキャッシュを捨てる
+    @Volatile private var cachedDbModified = 0L
+
+    private fun prefixRows(pattern: String): List<DictEntry> {
+        val modified = dbFile.lastModified()
+        synchronized(prefixRowCache) {
+            if (modified != cachedDbModified) {
+                prefixRowCache.clear()
+                cachedDbModified = modified
+            }
+            prefixRowCache[pattern]?.let { return it }
+        }
+        val list = ArrayList<DictEntry>(PREFIX_ROWS)
+        readableDatabase.rawQuery(
+            "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE yomi GLOB ? ORDER BY weight ASC LIMIT $PREFIX_ROWS",
+            arrayOf(pattern)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                list.add(DictEntry(cursor.getString(0), cursor.getString(1), cursor.getInt(2), cursor.getInt(3), cursor.getInt(4)))
+            }
+        }
+        synchronized(prefixRowCache) { prefixRowCache[pattern] = list }
+        return list
+    }
+
+    private fun prefixRows(patterns: List<String>): List<DictEntry> =
+        if (patterns.size == 1) prefixRows(patterns[0])
+        else patterns.flatMap { prefixRows(it) }.sortedBy { it.weight }.take(PREFIX_ROWS)
+
+    // 🌟 先頭1文字のパターンは重いので、起動直後に裏で先に引いておく
+    fun warmUpPrefixCache() {
+        for (c in 'ぁ'..'ゔ') prefixRows("$c*")
+    }
+
+    // 🌟 予測変換用: 読みがheadで始まり、headより長い語をコストの安い順に
+    fun getPredictionMatches(head: String, limit: Int): List<DictEntry> =
+        prefixRows("$head*").asSequence().filter { it.yomi != head }.take(limit).toList()
 
     // ==========================================
     // 以降のコードは元のまま（ROMAJI_GLOB_MAP, onCreate, onOpen, getCandidates など）
@@ -119,6 +173,20 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
                 yomi TEXT,
                 use_count INTEGER DEFAULT 1,
                 last_used_time INTEGER
+            )
+        """)
+        // 🌟 実入力からの継続学習フェーズ1(learn_math_japanese/docs/CONTINUOUS_LEARNING_DESIGN.md参照)。
+        // user_historyとは別目的: Viterbiの1位ではない候補を選んだ「訂正イベント」だけを
+        // 記録する。PC側でadb pullして回収し、人がレビューしてからtune_costs.txtに
+        // 反映する運用を想定しており、端末上でこのテーブルの中身を読み返して
+        // 変換ロジックに反映することはしない(そのため列も最小限)。
+        db?.execSQL("""
+            CREATE TABLE IF NOT EXISTS correction_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                yomi TEXT,
+                selected_word TEXT,
+                viterbi_top1 TEXT,
+                timestamp INTEGER
             )
         """)
     }
@@ -169,6 +237,34 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         }
     }
 
+    // 🌟 実入力からの継続学習フェーズ1。呼び出し側(KeyboardController)が
+    // 「Viterbiの1位ではない候補が選ばれた」と判定した時だけ呼ぶ想定だが、
+    // 念のためここでも同じ語なら記録しない(念押しのガード)。
+    fun logCorrection(yomi: String, selectedWord: String, viterbiTop1: String) {
+        if (selectedWord == viterbiTop1) return
+        val db = writableDatabase
+        try {
+            db.execSQL(
+                "INSERT INTO correction_log (yomi, selected_word, viterbi_top1, timestamp) VALUES (?, ?, ?, ?)",
+                arrayOf(yomi, selectedWord, viterbiTop1, System.currentTimeMillis())
+            )
+            // 🌟 user_historyと同じ間引き方式。訂正イベントはuser_historyより
+            // 発生頻度が低いはずなので、上限は小さめの2000件にしてある。
+            if (Math.random() < 0.1) {
+                db.execSQL("""
+                    DELETE FROM correction_log
+                    WHERE id IN (
+                        SELECT id FROM correction_log
+                        ORDER BY timestamp ASC
+                        LIMIT -1 OFFSET 2000
+                    )
+                """)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun getExactMatches(yomi: String): List<DictEntry> {
         val list = java.util.ArrayList<DictEntry>(10)
         readableDatabase.rawQuery("SELECT word, yomi, weight, lid, rid FROM dictionary WHERE yomi = ?", arrayOf(yomi)).use { cursor ->
@@ -207,27 +303,19 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
 
         val remainingLimit = limit - finalCandidates.size
         val baseDictCandidates = mutableListOf<Pair<Pair<String, String>, Int>>()
-        val dictArgs = prefixes.toTypedArray()
-        db.rawQuery(
-            "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE $whereClause ORDER BY weight ASC LIMIT 100",
-            dictArgs
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val word = cursor.getString(0)
-                val yomi = cursor.getString(1)
-                val weight = cursor.getInt(2)
-                val lid = cursor.getInt(3)
+        for (entry in prefixRows(prefixes)) {
+            val word = entry.word
+            val yomi = entry.yomi
 
-                if (finalCandidates.any { it.first == word }) continue
+            if (finalCandidates.any { it.first == word }) continue
 
-                val expectedMinLen = hiragana.length + (if (trailingRomaji.isNotEmpty()) 1 else 0)
-                val missingCharCount = kotlin.math.max(0, yomi.length - expectedMinLen)
-                val predictionPenalty = missingCharCount * 100
+            val expectedMinLen = hiragana.length + (if (trailingRomaji.isNotEmpty()) 1 else 0)
+            val missingCharCount = kotlin.math.max(0, yomi.length - expectedMinLen)
+            val predictionPenalty = missingCharCount * 100
 
-                val connectionCost = if (matrix != null && prevRid != 0) matrix.getConnectionCost(prevRid, lid) else 0
-                val finalCost = weight + predictionPenalty + connectionCost
-                baseDictCandidates.add(Pair(Pair(word, yomi), finalCost))
-            }
+            val connectionCost = if (matrix != null && prevRid != 0) matrix.getConnectionCost(prevRid, entry.lid) else 0
+            val finalCost = entry.weight + predictionPenalty + connectionCost
+            baseDictCandidates.add(Pair(Pair(word, yomi), finalCost))
         }
 
         baseDictCandidates.sortBy { it.second }
@@ -269,27 +357,11 @@ class DictionaryDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
     // これにより CandidateManager 側で生の romaji 文字を変換結果の末尾に
     // そのまま連結する（"局所t" のような文字化けした候補になる）必要が無くなる。
     fun getPrefixMatchesForViterbi(hiraganaPrefix: String, trailingRomaji: String = ""): List<DictEntry> {
-        val list = mutableListOf<DictEntry>()
         val prefixes = getGlobPrefixes(hiraganaPrefix, trailingRomaji)
-        val whereClause = prefixes.joinToString(" OR ") { "yomi GLOB ?" }
         val expectedMinLen = hiraganaPrefix.length + (if (trailingRomaji.isNotEmpty()) 1 else 0)
-
-        readableDatabase.rawQuery(
-            "SELECT word, yomi, weight, lid, rid FROM dictionary WHERE $whereClause ORDER BY weight ASC LIMIT 50",
-            prefixes.toTypedArray()
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val word = cursor.getString(0)
-                val yomi = cursor.getString(1)
-                val baseWeight = cursor.getInt(2)
-                val lid = cursor.getInt(3)
-                val rid = cursor.getInt(4)
-
-                val missingCharCount = kotlin.math.max(0, yomi.length - expectedMinLen)
-                val predictionPenalty = missingCharCount * 150
-                list.add(DictEntry(word, yomi, baseWeight + predictionPenalty, lid, rid))
-            }
+        return prefixRows(prefixes).take(50).map { e ->
+            val missingCharCount = kotlin.math.max(0, e.yomi.length - expectedMinLen)
+            e.copy(weight = e.weight + missingCharCount * 150)
         }
-        return list
     }
 }

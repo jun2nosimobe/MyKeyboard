@@ -26,7 +26,10 @@ sealed class KeyboardEvent {
     object SpaceTapped : KeyboardEvent()
     object EnterTapped : KeyboardEvent()
     object BackspaceTapped : KeyboardEvent()
-    data class CandidateSelected(val text: String) : KeyboardEvent()
+    // 🌟 yomi: この候補が対応する読み。部分変換(先頭文節だけの候補)の時は
+    // 現在の全体の読みより短い文字列になる(KeyboardController.handleCandidateSelected
+    // 側でそれを見て部分確定/全体確定を判定する)。
+    data class CandidateSelected(val text: String, val yomi: String) : KeyboardEvent()
     data class ModeChanged(val mode: MathKeyboardService.InputMode, val isOneShot: Boolean = true) : KeyboardEvent()
     object ShiftToggled : KeyboardEvent()
     // 🌟 フリック入力用: ひらがな1文字(あ〜ん・ー等)をそのまま入力欄に追加する

@@ -88,6 +88,7 @@ class MathKeyboardService : InputMethodService() {
         controller.currentEditorInfo = info
 
         themeManager.reloadBackground(keyboardView)
+        controller.applyKeyboardHeightScale()
         updateKeyboardLabels()
     }
 

@@ -7,6 +7,9 @@ class CandidateManager(
     private val composer: Composer,
     private val matrix: MatrixManager
 ) {
+    // 部分変換候補(先頭文節だけ確定)を置く位置(0始まり)。全体変換の上位4件の後
+    private val PARTIAL_CANDIDATE_INDEX = 4
+
     // 🌟 「ひらがな二文字以下は候補から除外」への対応。
     // 変換候補(辞書完全一致・Viterbi結果)の中に、漢字化されていない生のひらがなが
     // 1〜2文字だけ混じっていると、意味のある変換候補に紛れて選びにくくなる
@@ -34,12 +37,17 @@ class CandidateManager(
         if (rawStr.isEmpty()) {
             val lastWord = state.lastConfirmedWord
             if (!lastWord.isNullOrEmpty()) {
-                val prevRid = dbHelper.getRidForWord(lastWord)
-                if (prevRid != null) {
-                    val bestLids = matrix.getTopConnectingLids(prevRid, limit = 5)
-                    val predictions = dbHelper.getPredictionsByLids(bestLids, limit = 15)
-                    finalCandidates.addAll(predictions.filterNot { isShortHiraganaNoise(it.first) })
-                }
+                // 🌟 直前に確定した語が辞書のword列に完全一致しない場合
+                // (英語/TeXコマンド/記号/辞書に無い生のひらがな確定等)、
+                // getRidForWordがnullを返し次単語予測が一切出せなくなっていた
+                // (「次の変換候補が出る時と出ない時がある」の原因)。
+                // 文脈が分からない時はBOS相当(rid=0)にフォールバックすることで、
+                // 何も出さないよりは、patch_matrix.pyで意図的に開放してある
+                // 文頭ルート経由の一般的な候補を出す。
+                val prevRid = dbHelper.getRidForWord(lastWord) ?: 0
+                val bestLids = matrix.getTopConnectingLids(prevRid, limit = 5)
+                val predictions = dbHelper.getPredictionsByLids(bestLids, limit = 15)
+                finalCandidates.addAll(predictions.filterNot { isShortHiraganaNoise(it.first) })
             }
             return finalCandidates
         }
@@ -78,17 +86,12 @@ class CandidateManager(
             }
             finalCandidates.addAll(engPairs)
 
-            val exactMatchExists = engSuggestions.any { it.equals(rawStr, ignoreCase = true) }
-
-            if (finalCandidates.none { it.first == rawStr }) {
-                if (exactMatchExists) {
-                    // 辞書に完全一致する単語がある場合は、安心して一番左（先頭）に確定候補として置く
-                    finalCandidates.add(0, Pair(rawStr, rawStr))
-                } else {
-                    // 入力途中など、完全一致しない場合はサジェストの邪魔にならないよう一番右（最後尾）に置く
-                    finalCandidates.add(Pair(rawStr, rawStr))
-                }
-            }
+            // 🌟 打った文字列と一致する語があれば、辞書の表記(riemann と打っても Riemann、pde でも PDE)
+            // の方を先頭に置く。TeXは大文字小文字を区別する。打ったとおりの文字列は、候補に同じものが
+            // 無い時だけ、サジェストの邪魔にならないよう最後尾に置く
+            val exactIdx = finalCandidates.indexOfFirst { it.first.equals(rawStr, ignoreCase = !rawStr.startsWith("\\")) }
+            if (exactIdx > 0) finalCandidates.add(0, finalCandidates.removeAt(exactIdx))
+            if (finalCandidates.none { it.first == rawStr }) finalCandidates.add(Pair(rawStr, rawStr))
 
             return finalCandidates
         }
@@ -120,9 +123,30 @@ class CandidateManager(
             trailingRomaji = trailingRomaji,
             limit = 10
         ) else emptyList()
-        val viterbiCandidates = viterbiResults.map {
-            Pair(it, cleanHiragana + trailingRomaji)
-        }.filterNot { isShortHiraganaNoise(it.first) }
+        // 🌟 予測変換: 読みを最後まで打たなくても、最後の語を補った候補を出す(かかんだいす→可換代数)。
+        // 通常の変換と合わせてコストの安い順に並べる(learn_math_japanese/v2/engine.py の merge と
+        // 同じ規則)。予測側には PRED_BASE が足してあり、読みを最後まで打った時の1位は変わらない。
+        val predictedResults = if (cleanHiragana.isNotEmpty() && trailingRomaji.isEmpty())
+            viterbiConverter.predict(cleanHiragana, limit = 10) else emptyList()
+        val mergedResults = (viterbiResults + predictedResults).sortedBy { it.cost }
+
+        // 🌟 1位はひらがなのままでも除外しない。「その」「この」のような語は1位がそのまま正解で、
+        // 除外すると2位の「園」が先頭に繰り上がっていた。
+        val viterbiCandidates = mergedResults.mapIndexedNotNull { idx, r ->
+            if (idx > 0 && isShortHiraganaNoise(r.text)) null
+            else Pair(r.text, cleanHiragana + trailingRomaji)
+        }
+
+        // 🌟 部分変換(先頭文節だけ確定して残りは変換待ちに残す)。
+        // 1位の変換結果が2文節以上に分かれている時だけ、先頭文節を単独の候補として
+        // 追加する。読み(.second)は全体ではなく先頭文節分だけの短い文字列にしておき、
+        // KeyboardController.handleCandidateSelected側でこれを見て「部分確定」だと
+        // 判定できるようにする。
+        val topViterbiResult = viterbiResults.firstOrNull()
+        val partialCandidate = topViterbiResult?.firstSegmentWord?.let { word ->
+            if (isShortHiraganaNoise(word)) null
+            else Pair(word, cleanHiragana.substring(0, topViterbiResult.firstSegmentHiraganaLength))
+        }
 
         val prevRid = state.lastConfirmedWord.takeIf { it.isNotEmpty() }?.let {
             dbHelper.getRidForWord(it)
@@ -150,6 +174,11 @@ class CandidateManager(
             for (cand in viterbiCandidates) if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(
                 cand
             )
+            // 🌟 部分変換候補は、全体変換の上位の後に挿入する。2番目に置いていた時は、
+            // 全体変換の2位以下を探す時に目障りだった。
+            if (partialCandidate != null && finalCandidates.none { it.first == partialCandidate.first }) {
+                finalCandidates.add(minOf(PARTIAL_CANDIDATE_INDEX, finalCandidates.size), partialCandidate)
+            }
             for (cand in dbCandidates) if (finalCandidates.none { it.first == cand.first }) finalCandidates.add(
                 cand
             )

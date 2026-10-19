@@ -107,12 +107,27 @@ class EnglishDictionaryHelper(private val context: Context) :
         val isTexCommand = prefix.startsWith("\\")
         val targetType = if (isTexCommand) 1 else 0
 
-        val query = "SELECT word FROM english_math_dictionary WHERE type = ? AND word LIKE ? ORDER BY weight ASC LIMIT ?"
-        val likePrefix = "$prefix%"
+        // 🌟 TeXは大文字小文字を区別する(\Ga と打ったら \gamma ではなく \Gamma)のでGLOB。
+        // 英単語は区別しない(表示は打ち方に合わせてCandidateManagerが変える)のでLIKE
+        val query = if (isTexCommand)
+            "SELECT word FROM english_math_dictionary WHERE type = ? AND word GLOB ? ORDER BY weight ASC LIMIT ?"
+        else
+            "SELECT word FROM english_math_dictionary WHERE type = ? AND word LIKE ? ORDER BY weight ASC LIMIT ?"
+        val pattern = if (isTexCommand) "$prefix*" else "$prefix%"
 
-        db.rawQuery(query, arrayOf(targetType.toString(), likePrefix, limit.toString())).use { cursor ->
+        db.rawQuery(query, arrayOf(targetType.toString(), pattern, limit.toString())).use { cursor ->
             while (cursor.moveToNext()) {
                 list.add(cursor.getString(0))
+            }
+        }
+        // 🌟 打った文字列と一致する語が上位limit件の外にあっても候補に入れる(先頭に置くのはCandidateManager)
+        if (list.none { it.equals(prefix, ignoreCase = !isTexCommand) }) {
+            val exactQuery = if (isTexCommand)
+                "SELECT word FROM english_math_dictionary WHERE type = ? AND word = ? LIMIT 1"
+            else
+                "SELECT word FROM english_math_dictionary WHERE type = ? AND word = ? COLLATE NOCASE LIMIT 1"
+            db.rawQuery(exactQuery, arrayOf(targetType.toString(), prefix)).use { cursor ->
+                if (cursor.moveToFirst()) list.add(0, cursor.getString(0))
             }
         }
         return list

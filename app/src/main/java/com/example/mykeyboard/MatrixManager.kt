@@ -75,8 +75,12 @@ class MatrixManager(private val context: Context) {
         }
     }
 
+    // 🌟 v2(learn_math_japanese/v2/engine.py と同じ規則): 文末(lid=0)への接続だけ0。
+    // 文頭(rid=0)からの接続は行列の値を使う。v1は両方0にしていたが、それは行列を1列ずらして
+    // 読んでいたため文頭・文末の値が壊れていた頃の回避策で、数の単位「澗」のような語が
+    // 文頭で不利にならない原因になっていた。正しく読んだMozc行列では文末の列は全品詞0。
     fun getConnectionCost(rid: Int, lid: Int): Int {
-        if (rid == 0 || lid == 0) return 0
+        if (lid == 0) return 0
         val buffer = mappedMatrix
         if (buffer == null || !isLoaded || rid >= matrixSize || lid >= matrixSize || rid < 0 || lid < 0) {
             return 30000
@@ -91,7 +95,9 @@ class MatrixManager(private val context: Context) {
     fun getTopConnectingLids(prevRid: Int, limit: Int = 5): List<Int> {
         val packedArray = IntArray(matrixSize - 1)
         for (lid in 1 until matrixSize) {
-            val cost = getConnectionCost(prevRid, lid)
+            // 🌟 記号ショートカット(2679)と未知語(2999)は次単語予測に出さない
+            // (文頭からはショートカットが0円でつながるので、句点の後に+や-が並んでいた)
+            val cost = if (lid == 2679 || lid == 2999) Short.MAX_VALUE.toInt() else getConnectionCost(prevRid, lid)
             packedArray[lid - 1] = (cost shl 16) or (lid and 0xFFFF)
         }
         packedArray.sort()
